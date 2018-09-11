@@ -39,11 +39,18 @@ public class TensorflowModel implements Computable {
         double result = Double.MIN_VALUE;
         if(initiate && smb != null) {
             Session.Runner runner = smb.session().runner();
-            runner.feed(inputNames[0], Tensor.create((input.getData())));
+            double[] inputDArr = input.getData();
+            float[] inputFArr = new float[inputDArr.length];
+            for(int i = 0; i < inputDArr.length; i++) {
+                inputFArr[i] = (float)inputDArr[i];
+            }
+            
+            runner.feed(inputNames[0], Tensor.create(new float[][]{inputFArr}));
 
             for(int i = 1; i < inputNames.length; i++) {
                 try {
-                    runner.feed(inputNames[i], Tensor.create(inputNames));
+                    System.out.println("feed " + inputNames[i] + " : " + properties.get(inputNames[i]));
+                    runner.feed(inputNames[i], Tensor.create(properties.get(inputNames[i])));
                 } catch(Exception e) {
                     LOG.error("Invalid input, {}", e);
                 }
@@ -70,7 +77,7 @@ public class TensorflowModel implements Computable {
         }
 
         this.config = config; 
-        Map<String, Object> properties = this.config.getProperties();
+        properties = this.config.getProperties();
         if(properties == null || properties.size() == 0) {
             LOG.error("Properties is null");
             throw new RuntimeException("Properties is null");
@@ -79,6 +86,8 @@ public class TensorflowModel implements Computable {
         this.inputNames = config.getInputnames().toArray(new String[config.getInputnames().size()]);
         this.outputNames = (String)properties.get("outputnames");
         this.tags = ((List<String>)properties.get("tags")).toArray(new String[((List<String>)properties.get("tags")).size()]);
+
+        LOG.error("Properties : {}", properties);
 
         if(this.modelPath == null || this.modelPath.isEmpty()) {
             LOG.error("Model path is null");
@@ -103,6 +112,7 @@ public class TensorflowModel implements Computable {
         LOG.error("Load model from " + this.modelPath);
         this.smb = SavedModelBundle.load(modelPath, tags);
         LOG.error("init tensorflow model done");
+        initiate = true;
     }
 
     @Override
