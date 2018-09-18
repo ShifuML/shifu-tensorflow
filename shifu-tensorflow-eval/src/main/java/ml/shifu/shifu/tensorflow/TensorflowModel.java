@@ -49,7 +49,6 @@ public class TensorflowModel implements Computable {
 
             for(int i = 1; i < inputNames.length; i++) {
                 try {
-                    System.out.println("feed " + inputNames[i] + " : " + properties.get(inputNames[i]));
                     runner.feed(inputNames[i], Tensor.create(properties.get(inputNames[i])));
                 } catch(Exception e) {
                     LOG.error("Invalid input, {}", e);
