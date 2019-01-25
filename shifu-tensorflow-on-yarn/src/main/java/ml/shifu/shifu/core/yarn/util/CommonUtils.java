@@ -213,8 +213,18 @@ public class CommonUtils {
     }
 
     public static String getCurrentHostName() {
+        //return System.getenv(ApplicationConstants.Environment.NM_HOST.name());
+        
         try {
             return InetAddress.getLocalHost().getHostName();
+        } catch (Exception e) {
+            throw new GuaguaRuntimeException(e);
+        }
+    }
+    
+    public static String getCurrentHostIP() {
+        try {
+            return InetAddress.getLocalHost().getHostAddress();
         } catch (Exception e) {
             throw new GuaguaRuntimeException(e);
         }
@@ -254,9 +264,6 @@ public class CommonUtils {
             taskProcess.waitFor(timeout, TimeUnit.MILLISECONDS);
         } else {
             taskProcess.waitFor();
-        }
-        if ("worker".equals(env.get("JOB_NAME")) && "0".equals(env.get("TASK_ID"))) {
-            HDFSUtils.getFS().copyFromLocalFile(false, true, new Path("./models"), new Path("/user/webai/tensorflow_models/"));
         }
 
         return taskProcess.exitValue();

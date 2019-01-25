@@ -52,7 +52,7 @@ public class TensorflowTask {
     }
 
     /** we get port only when job is executing, we will read it from zookeeper **/
-    private String tensorflowPort = null;
+    //private String tensorflowPort = null;
 
     int exitStatus = -1;
 
@@ -91,13 +91,13 @@ public class TensorflowTask {
         return this.container.getNodeId().getHost();
     }
 
-    public String getHostNameAndPort() {
-        return String.format("%s:%s", getHostName(), StringUtils.isBlank(tensorflowPort) ? 0 : tensorflowPort);
-    }
-
-    public void setTensorflowPort(String port) {
-        tensorflowPort = port;
-    }
+//    public String getHostNameAndPort() {
+//        return String.format("%s:%s", getHostName(), StringUtils.isBlank(tensorflowPort) ? 0 : tensorflowPort);
+//    }
+//
+//    public void setTensorflowPort(String port) {
+//        tensorflowPort = port;
+//    }
 
     void setExitStatus(int status) {
         this.completed = true;

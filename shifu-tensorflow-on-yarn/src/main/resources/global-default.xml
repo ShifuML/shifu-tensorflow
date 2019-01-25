@@ -43,7 +43,7 @@
     <property>
     <description>The trining python code path</description>
     <name>shifu.application.python-script-path</name>
-    <value>/SAGN.py</value>
+    <value>/ssgd_monitor.py</value>
   </property>
 
     <property>
@@ -100,7 +100,7 @@
   <property>
     <description>Number of vcores per parameter server.</description>
     <name>shifu.ps.vcores</name>
-    <value>1</value>
+    <value>2</value>
   </property>
 
   <property>
@@ -125,7 +125,7 @@
   <property>
     <description>Number of vcores per worker.</description>
     <name>shifu.worker.vcores</name>
-    <value>1</value>
+    <value>2</value>
   </property>
 
   <property>

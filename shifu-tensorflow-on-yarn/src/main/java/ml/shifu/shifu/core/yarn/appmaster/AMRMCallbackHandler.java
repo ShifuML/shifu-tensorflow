@@ -192,7 +192,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
               + ", 3 = " + container.getId()
               + ", containerNode = " + container.getNodeId().getHost() + ":" + container.getNodeId().getPort()
               + ", resourceRequest = " + container.getResource());
-         
           TensorflowTask task = session.distributeTaskToContainer(container);       
           Preconditions.checkNotNull(task, "Task was null! Nothing to schedule.");
           

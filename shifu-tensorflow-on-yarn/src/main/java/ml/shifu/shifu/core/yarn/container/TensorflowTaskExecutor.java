@@ -45,6 +45,7 @@ import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooDefs.Ids;
 
 import ml.shifu.guagua.coordinator.zk.GuaguaZooKeeper;
+import ml.shifu.guagua.coordinator.zk.ZooKeeperUtils;
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
 import ml.shifu.shifu.core.yarn.util.Constants;
 import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
@@ -73,13 +74,11 @@ public class TensorflowTaskExecutor implements Watcher {
 
     private Map<String, String> shellEnv = new HashMap<String, String>();
 
-    public TensorflowTaskExecutor() throws IOException  {
+    public TensorflowTaskExecutor()  {
         globalConf.addResource(new Path(Constants.GLOBAL_FINAL_XML));
-
-        tensorflowSocket = new ServerSocket(0);
     }
 
-    public void registeryToCluster() throws UnknownHostException, KeeperException, InterruptedException {
+    public void registeryToCluster() throws KeeperException, InterruptedException, IOException {
         String port = getTensorflowPort();
 
         if(StringUtils.isBlank(port)) {
@@ -90,7 +89,7 @@ public class TensorflowTaskExecutor implements Watcher {
         zookeeper.exists(Constants.TENSORFLOW_FINAL_CLUSTER, true);
 
         zookeeper.createOrSetExt(Constants.TENSORFLOW_CLUSTER_ROOT_PATH + containerId,
-                port.getBytes(Charset.forName("UTF-8")), Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT, true, -1);
+                (CommonUtils.getCurrentHostIP() + ":" + port).getBytes(Charset.forName("UTF-8")), Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT, true, -1);
 
         latch.await();
     }
@@ -112,7 +111,9 @@ public class TensorflowTaskExecutor implements Watcher {
         }
     }
 
-    public String getTensorflowPort() {
+    public String getTensorflowPort() throws IOException {
+        tensorflowSocket = new ServerSocket(ZooKeeperUtils.getValidZooKeeperPort());
+    
         return Integer.toString(this.tensorflowSocket.getLocalPort());
     }
 

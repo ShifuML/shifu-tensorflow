@@ -23,6 +23,7 @@ from tensorflow.python.platform import gfile
 
 log_dir = '/logdir'
 
+REPLICAS_TO_AGGREGATE_RATIO = 1
 VALID_TRAINING_DATA_RATIO = 0.3
 DELIMITER = '|'
 LEARNING_RATE = 0.003
@@ -40,6 +41,8 @@ n_workers = len(cluster_spec['worker'])  # the number of worker nodes
 job_name = os.environ["JOB_NAME"]
 task_index = int(os.environ["TASK_ID"])
 
+# Configure
+config = tf.ConfigProto(log_device_placement=False, allow_soft_placement=True)
 
 def main():
     logging.getLogger().setLevel(logging.INFO)
@@ -82,32 +85,6 @@ def main():
 
             loptimizer, loss, local_step = model(input_placeholder, label_placeholder, sample_weight_placeholder)
 
-            # Hidden Layer
-            weight = tf.Variable(tf.constant(0., shape=[context["feature_count"], 20]), dtype=tf.float32,
-                                 collections=[tf.GraphKeys.LOCAL_VARIABLES])
-            bias = tf.Variable(tf.constant(0., shape=[20]), dtype=tf.float32,
-                               collections=[tf.GraphKeys.LOCAL_VARIABLES])
-            output = tf.matmul(input_placeholder, weight)
-            output = tf.add(output, bias)
-            output = tf.nn.leaky_relu(output)
-            # Output layer
-            weight = tf.Variable(tf.constant(0., shape=[20, 1]), dtype=tf.float32,
-                                 collections=[tf.GraphKeys.LOCAL_VARIABLES])
-            bias = tf.Variable(tf.constant(0., shape=[1]), dtype=tf.float32, collections=[tf.GraphKeys.LOCAL_VARIABLES])
-            output = tf.matmul(output, weight)
-            output = tf.add(output, bias)
-
-            prediction = tf.nn.sigmoid(output, name="shifu_output_0")
-
-            loss = tf.losses.mean_squared_error(predictions=prediction, labels=label_placeholder,
-                                                weights=sample_weight_placeholder)
-
-            local_step = tf.Variable(0, dtype=tf.int32, trainable=False,
-                                     name='local_step', collections=['local_non_trainable'])
-
-            loptimizer = tf.train.AdamOptimizer(LEARNING_RATE)
-            # loptimizer = tf.train.GradientDescentOptimizer(base_lr)
-
             # SDAG (simplest case since all batches are the same)
             update_window = 5  # T: communication window
             grad_list = None  # the array to store the gradients through the communication window
@@ -115,10 +92,10 @@ def main():
                 if t != 0:
                     # compute gradients only if the local opt was run
                     with tf.control_dependencies([opt_local]):
-                        grads, varss = zip(*loptimizer.compute_gradients( \
+                        grads, varss = zip(*loptimizer.compute_gradients(
                             loss, var_list=tf.local_variables()))
                 else:
-                    grads, varss = zip(*loptimizer.compute_gradients( \
+                    grads, varss = zip(*loptimizer.compute_gradients(
                         loss, var_list=tf.local_variables()))
 
                 # add gradients to the list
@@ -156,16 +133,13 @@ def main():
             # create global variables and/or references
             local_to_global, global_to_local = create_global_variables(lopt_vars)
 
-            optimizer = tf.train.AdamOptimizer(LEARNING_RATE)
-            # optimizer = tf.train.GradientDescentOptimizer(base_lr)
+            optimizer = tf.train.GradientDescentOptimizer(LEARNING_RATE)
             optimizer1 = tf.train.SyncReplicasOptimizer(optimizer,
-                                                        replicas_to_aggregate=int(n_workers * 0.9),
+                                                        replicas_to_aggregate=int(n_workers * REPLICAS_TO_AGGREGATE_RATIO),
                                                         total_num_replicas=n_workers)
 
             # apply the gradients to variables on ps
-            opt = optimizer1.apply_gradients(
-                zip(grads, [local_to_global[v] for v in varss])
-                , global_step=global_step)
+            opt = optimizer1.apply_gradients(zip(grads, [local_to_global[v] for v in varss]), global_step=global_step)
 
             with tf.control_dependencies([opt]):
                 assign_locals = assign_global_to_local(global_to_local)
@@ -190,20 +164,14 @@ def main():
             ready_for_local_init = optimizer1.ready_for_local_init_op
 
             with tf.control_dependencies([local_init]):
-                init_local = tf.variables_initializer(tf.local_variables() \
+                init_local = tf.variables_initializer(tf.local_variables()
                                                       + tf.get_collection('local_non_trainable'))  # for local variables
 
             init = tf.global_variables_initializer()  # must come after other init ops
 
-        total_batch = int(len(context["train_data"]) / BATCH_SIZE)
-        input_batch = np.array_split(context["train_data"], total_batch)
-        target_batch = np.array_split(context["train_target"], total_batch)
-        train_sample_weight_batch = np.array_split(context["train_data_sample_weight"], total_batch)
-
         # Session
         sync_replicas_hook = optimizer1.make_session_run_hook(is_chief)
-        stop_hook = tf.train.StopAtStepHook(
-            last_step=1000)  # epoch * total_batch) # step means every step to update variable
+        stop_hook = tf.train.StopAtStepHook(last_step=EPOCH * total_batch)  # epoch * total_batch) # step means every step to update variable
         chief_hooks = [sync_replicas_hook, stop_hook]
         scaff = tf.train.Scaffold(init_op=init,
                                   local_init_op=init_local,
@@ -268,7 +236,7 @@ def model(x, y_, sample_weight):
 
     loss = tf.losses.mean_squared_error(predictions=y, labels=y_, weights=sample_weight)
 
-    loptimizer = tf.train.GradientDescentOptimizer(0.01)
+    loptimizer = tf.train.GradientDescentOptimizer(LEARNING_RATE)
 
     return loptimizer, loss, local_step
 

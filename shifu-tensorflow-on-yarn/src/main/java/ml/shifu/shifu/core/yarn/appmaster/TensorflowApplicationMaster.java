@@ -83,16 +83,9 @@ public class TensorflowApplicationMaster {
 
     /** Node manager delegates **/
     private NMCallbackHandler containerListener;
-    private NMClientAsync nmClientAsync;
-    /** Resource manager **/
-    private AMRMClientAsync<ContainerRequest> amRMClient;
-    AMRMCallbackHandler allocListener;
-    /**
-     * Metadata + History Server related variables
-     */
-    private String shifuHistoryFolder;
-    private Path jobDir = null;
 
+    AMRMCallbackHandler allocListener;
+    
     private int appTimeout;
     private long workerTimeout;
     private int amRetryCount;
@@ -154,9 +147,7 @@ public class TensorflowApplicationMaster {
                 GlobalConfigurationKeys.DEFAULT_TASK_HEARTBEAT_INTERVAL_MS);
         maxConsecutiveHBMiss = globalConf.getInt(GlobalConfigurationKeys.TASK_MAX_MISSED_HEARTBEATS,
                 GlobalConfigurationKeys.DEFAULT_TASK_MAX_MISSED_HEARTBEATS);
-        shifuHistoryFolder = globalConf.get(GlobalConfigurationKeys.SHIFU_HISTORY_LOCATION,
-                GlobalConfigurationKeys.DEFAULT_SHIFU_HISTORY_LOCATION);
-
+        
         return true;
     }
 
@@ -186,14 +177,6 @@ public class TensorflowApplicationMaster {
             amRMClient.registerApplicationMaster(hostname, -1, null);
         } catch (Exception e) {
             LOG.error("Exception while preparing AM", e);
-            return false;
-        }
-
-        try {
-            setupJobDir(hdfs, shifuHistoryFolder, appIdString);
-            writeConfigFile(hdfs, jobDir);
-        } catch (IOException e) {
-            LOG.error(e);
             return false;
         }
 
@@ -367,61 +350,5 @@ public class TensorflowApplicationMaster {
         taskHasMissesHB = true;
         session.setFinalStatus(FinalApplicationStatus.FAILED, msg);
         mainThread.interrupt();
-    }
-
-    /**
-     * Create job directory under intermediate folder.
-     * 
-     * @param fs
-     *            FileSystem object.
-     * @param histFolder
-     *            History folder location string.
-     * @param appId
-     *            Application ID string.
-     */
-    private void setupJobDir(FileSystem fs, String histFolder, String appId) {
-        Path interm = new Path(histFolder, Constants.SHIFU_HISTORY_INTERMEDIATE);
-        try {
-            if(!fs.exists(interm)) {
-                LOG.error("Intermediate directory doesn't exist");
-                return;
-            }
-        } catch (IOException e) {
-            LOG.error("Failed to check intermediate directory existence", e);
-            return;
-        }
-
-        jobDir = new Path(interm, appId);
-        // set to `shifu` group by default
-        // due to inherited permission from parent folder
-        HdfsUtils.createDir(fs, jobDir, Constants.PERM770);
-    }
-
-    /**
-     * Generate config file in {@code jobDir} folder.
-     * 
-     * @param fs
-     *            FileSystem object.
-     * @param jobDir
-     *            Path object of job directory (store all the files related to the job).
-     * @throws IOException
-     *             when failed to write config.xml to {@code jobDir}
-     */
-    private void writeConfigFile(FileSystem fs, Path jobDir) throws IOException {
-        if(jobDir == null) {
-            return;
-        }
-        Path configFile = new Path(jobDir, "config.xml");
-        FSDataOutputStream out = null;
-        try {
-            out = fs.create(configFile);
-            globalConf.writeXml(out);
-        } catch (IOException e) {
-            throw new IOException("Failed to write config to XML", e);
-        } finally {
-            if(out != null) {
-                out.close();
-            }
-        }
     }
 }

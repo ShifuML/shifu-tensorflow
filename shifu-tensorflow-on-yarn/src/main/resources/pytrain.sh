@@ -7,6 +7,7 @@ echo $PYTHON_HOME
 echo $TRAIN_SCRIPT_PATH
 echo $HADOOP_HOME
 echo $LD_LIBRARY_PATH
+
 chmod 777 -R ./
 
 source $HADOOP_HOME/libexec/hadoop-config.sh

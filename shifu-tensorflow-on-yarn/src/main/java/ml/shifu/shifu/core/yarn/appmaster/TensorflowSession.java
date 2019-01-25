@@ -72,7 +72,7 @@ public class TensorflowSession implements Watcher {
     private Map<String, TensorflowTask> containerIdToTask = new HashMap<String, TensorflowTask>();
     // A map from task name to an array of TFTasks with that name.
     private Map<String, TensorflowTask[]> jobNameToTasks = new ConcurrentHashMap<String, TensorflowTask[]>();
-    private TensorflowClusterSpec tensorflowClusterSpec = new TensorflowClusterSpec();
+    private TensorflowClusterSpec tensorflowClusterSpec;
 
     /** those task not have container **/
     private Map<String, Integer> jobNameToPendingTaskNumber = new ConcurrentHashMap<String, Integer>();
@@ -140,6 +140,8 @@ public class TensorflowSession implements Watcher {
             }
         }
 
+        this.tensorflowClusterSpec = new TensorflowClusterSpec(numTotalPsTasks, numTotalWorkerTasks);
+        
         // Split training data for workers
         try {
             splitedTrainingData = TrainingDataSet.getInstance().getSplitedFilePaths(this.globalConf, this.numTotalWorkerTasks,
@@ -405,10 +407,9 @@ public class TensorflowSession implements Watcher {
         
         String containerId = event.getPath().replace(Constants.TENSORFLOW_CLUSTER_ROOT_PATH, "");
         try {
-            String port = new String(zookeeperServer.getData(event.getPath(), null, null));
+            String ipAndPort = new String(zookeeperServer.getData(event.getPath(), null, null));
             TensorflowTask task = this.containerIdToTask.get(containerId);
-            task.setTensorflowPort(port);
-            this.tensorflowClusterSpec.add(task.getJobName(), task.getHostNameAndPort());
+            this.tensorflowClusterSpec.add(task.getJobName(), Integer.valueOf(task.getTaskIndex()), ipAndPort);
         } catch (Exception e) {
             LOG.error("Getting worker port fails.", e);
             throw new RuntimeException(e);
@@ -449,27 +450,37 @@ public class TensorflowSession implements Watcher {
     }
     
     class TensorflowClusterSpec {
-        private List<String> ps = new ArrayList<String>();
-        private List<String> worker = new ArrayList<String>();
-
-        public synchronized void add(String jobName, String hostnamePort) {
+        // In order to make spec host order same as task order
+        private String[] ps;
+        private String[] worker;
+        private int readyPsCnt = 0;
+        private int readyWorkerCnt = 0;
+        
+        TensorflowClusterSpec(int psTaskCnt, int workerTaskCnt) {
+            ps = new String[psTaskCnt];
+            worker = new String[workerTaskCnt];
+        }
+        
+        public synchronized void add(String jobName, int taskId, String hostnamePort) {
             if("ps".equalsIgnoreCase(jobName)) {
-                ps.add(hostnamePort);
+                ps[taskId] = hostnamePort;
+                readyPsCnt += 1;
             } else {
-                worker.add(hostnamePort);
+                worker[taskId] = hostnamePort;
+                readyWorkerCnt += 1;
             }
         }
 
-        public synchronized int totalWorkerAndPs() {
-            return ps.size() + worker.size();
-        }
-
-        public List<String> getPs() {
-            return this.ps;
+        public String[] getPs() {
+            return ps;
         }
         
-        public List<String> getWorker() {
-            return this.worker;
+        public String[] getWorker() {
+            return worker;
+        }
+        
+        public synchronized int totalWorkerAndPs() {
+            return readyWorkerCnt + readyPsCnt;
         }
         
         public String toString() {
