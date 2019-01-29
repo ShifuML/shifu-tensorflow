@@ -70,7 +70,7 @@ public abstract class AbstractApplicationMaster {
     /**
      * preparation work before schduleing task exector
      */
-    protected void prepareBeforeTaskExector() {}
+    protected abstract void prepareBeforeTaskExector();
     
     protected abstract void scheduleTask();
     
@@ -80,6 +80,13 @@ public abstract class AbstractApplicationMaster {
      *      false if some executor failed, return true if all executor complete
      */
     protected abstract boolean monitor();
+    
+    /**
+     * After out of monitor, we need to summary overall training job success or not
+     */
+    protected abstract void updateTaskStatus();
+    
+    protected abstract boolean canRecovered();
     
     protected abstract void recovery();
     
@@ -93,11 +100,11 @@ public abstract class AbstractApplicationMaster {
         LOG.info("Start init....");
         init(args);
         
-        LOG.info("Start registerRMCallbackHandler....");
-        registerRMCallbackHandler();
-        
         LOG.info("Start registerNMCallbackHandler....");
         registerNMCallbackHandler();
+        
+        LOG.info("Start registerRMCallbackHandler....");
+        registerRMCallbackHandler();
         
         LOG.info("Start registerAMToRM....");
         registerAMToRM();
@@ -110,9 +117,16 @@ public abstract class AbstractApplicationMaster {
         
         LOG.info("Start monitor....");
         while(!monitor()) {
-            LOG.info("Start recovery....");
-            recovery();
+            if (canRecovered()) {
+                LOG.info("Start recovery....");
+                recovery();
+            } else {
+                LOG.info("Cannot recover....");
+                break;
+            }
         }
+        
+        updateTaskStatus();
         
         LOG.info("Start stop....");
         stop();

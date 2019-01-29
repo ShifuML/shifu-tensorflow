@@ -109,6 +109,12 @@
     <value>2</value>
   </property>
 
+  <property>
+    <description>Number of back-up parameter servers to request.</description>
+    <name>shifu.ps.instances.backup</name>
+    <value>2</value>
+  </property>
+
   <!-- Worker configurations -->
   <property>
     <description>Timeout, in milliseconds for the user's python processes before forcibly killing them.</description>
@@ -131,6 +137,12 @@
   <property>
     <description>Number of workers to request.</description>
     <name>shifu.worker.instances</name>
+    <value>2</value>
+  </property>
+
+  <property>
+    <description>Number of backup workers to request.</description>
+    <name>shifu.worker.instances.backup</name>
     <value>2</value>
   </property>
 

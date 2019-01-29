@@ -87,7 +87,7 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
             AbstractLivelinessMonitor<TensorflowTask> hbMonitor,
             Map<String, String> containerEnv,
             String appId) {
-        setTensorflowSession(session);
+        this.session = session;
         this.containerResources = new ConcurrentHashMap<String, LocalResource>();
         this.nmClientAsync = nmClientAsync;
         this.hbMonitor = hbMonitor;
@@ -153,16 +153,8 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
             TensorflowTask task = session.getTaskByContainerId(containerStatus.getContainerId());
 
             if(task != null) {
-                // Ignore tasks from past sessions.
-                if(task.getSessionId() != TensorflowSession.sessionId) {
-                    return;
-                }
-
                 // Update Tensorflow Session on the state of the task.
                 session.onTaskCompleted(task.getJobName(), task.getTaskIndex(), exitStatus);
-                if("worker".equals(task.getJobName())) {
-                    session.getNumCompletedWorkerTasks().incrementAndGet();
-                }
 
                 // Unregister task after completion..
                 // Since in the case of asynchronous exec, containers might
@@ -173,10 +165,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
                 LOG.warn("No task found for container : [" + containerStatus.getContainerId() + "]!");
             }
         }
-    }
-
-    public void setTensorflowSession(TensorflowSession session) {
-        this.session = session;
     }
     
     /*

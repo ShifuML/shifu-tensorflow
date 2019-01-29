@@ -85,10 +85,22 @@ def main(_):
                                  task_index=task_index)
         server.join()
     else:  # it must be a worker server
+        is_chief = (task_index == 0)  # checks if this is the chief node
+        server = tf.train.Server(cluster,
+                                 job_name="worker",
+                                 task_index=task_index)
+
         logging.info("Loading data from worker index = %d" % task_index)
 
+        if "TRAINING_DATA_PATH" in os.environ:
+            logging.info("This is a normal worker..")
+            training_data_path = os.environ["TRAINING_DATA_PATH"]
+        else:
+            logging.info("This is a backup worker")
+            # watching certain file in hdfs which contains its training data
+
         # import data
-        context = load_data(os.environ["TRAINING_DATA_PATH"])
+        context = load_data(training_data_path)
 
         # split data into batch
         total_batch = int(len(context["train_data"]) / BATCH_SIZE)
@@ -99,16 +111,12 @@ def main(_):
         logging.info("Testing set size: %d" % len(context['valid_data']))
         logging.info("Training set size: %d" % len(context['train_data']))
 
-        is_chief = (task_index == 0)  # checks if this is the chief node
-        server = tf.train.Server(cluster,
-                                 job_name="worker",
-                                 task_index=task_index)
-
         # Graph
         worker_device = "/job:%s/task:%d" % (job_name, task_index)
-        with tf.device(tf.train.replica_device_setter(ps_tasks=n_pss,
-                                                      worker_device=worker_device,
-                                                      cluster=cluster)):
+        with tf.device(tf.train.replica_device_setter(ps_tasks=2,
+                                                      worker_device=worker_device
+                                                      #cluster=cluster
+                                                      )):
             input_placeholder = tf.placeholder(dtype=tf.float32, shape=(None, FEATURE_COUNT),
                                                name="shifu_input_0")
             label_placeholder = tf.placeholder(dtype=tf.int32, shape=(None, 1))
@@ -143,9 +151,14 @@ def main(_):
                                   local_init_op=local_init,
                                   ready_for_local_init_op=ready_for_local_init)
         # Configure
-        config = tf.ConfigProto(log_device_placement=False,
-                                allow_soft_placement=True)
-        # device_filters=['/job:ps', '/job:worker/task:%d' % task_index])
+        if "IS_BACKUP" in os.environ:
+            config = tf.ConfigProto(log_device_placement=False,
+                                    allow_soft_placement=True,
+                                    device_filters=['/job:ps', '/job:worker/task:0',
+                                                    '/job:worker/task:%d' % task_index])
+        else:
+            config = tf.ConfigProto(log_device_placement=False,
+                                    allow_soft_placement=True)
 
         # Create a "supervisor", which oversees the training process.
         sess = tf.train.MonitoredTrainingSession(master=server.target,
@@ -318,6 +331,7 @@ def simple_save(session, export_dir, inputs, outputs, legacy_init_op=None):
         clear_devices=True)
     b.save()
     #export_generic_config(export_dir=export_dir)
+
 
 if __name__ == '__main__':
     tf.app.run()

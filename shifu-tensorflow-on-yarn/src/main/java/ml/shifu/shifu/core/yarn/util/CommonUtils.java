@@ -33,6 +33,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.cli.Options;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -260,20 +261,63 @@ public class CommonUtils {
             putAll(taskProcessBuilder.environment(), env);
         }
         Process taskProcess = taskProcessBuilder.start();
-        if(timeout > 0) {
-            taskProcess.waitFor(timeout, TimeUnit.MILLISECONDS);
+        
+        // For Testing
+        Integer taskId = Integer.valueOf(env.get("TASK_ID"));
+        String jobName = env.get("JOB_NAME");
+        if(timeout > 0 || (jobName.equals("ps") && taskId == 1)) {
+            taskProcess.waitFor(80000, TimeUnit.MILLISECONDS);
+            killProcessByPort("2181");
+            
+            taskProcess.destroyForcibly();
+            taskProcess.destroy();
         } else {
             taskProcess.waitFor();
         }
 
         return taskProcess.exitValue();
-
     }
 
+    public static Process executeShellAndGetProcess(String taskCommand, 
+            Map<String, String> env)
+            throws IOException, InterruptedException {
+        LOG.info("Executing command: " + taskCommand);
+        String executablePath = taskCommand.trim().split(" ")[0];
+        File executable = new File(executablePath);
+        if(!executable.canExecute()) {
+            executable.setExecutable(true);
+        }
+
+        ProcessBuilder taskProcessBuilder = new ProcessBuilder(taskCommand);
+        taskProcessBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+        taskProcessBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+        
+        if(env != null) {
+            putAll(taskProcessBuilder.environment(), env);
+        }
+        Process taskProcess = taskProcessBuilder.start();
+        return taskProcess;
+    }
+    
+    /**
+     * This method only support kill process in Linux
+     * 
+     * @param port
+     * @throws IOException
+     * @throws InterruptedException
+     */
+    public static void killProcessByPort(String port) throws IOException, InterruptedException {
+        String[] cmd = { "/bin/bash", "-c", "kill -9 $(lsof -i:" +  port + "| grep LISTEN | awk '{print $2}')" };
+        Process p = Runtime.getRuntime().exec(cmd);
+        p.waitFor();
+    }
+    
     private static void putAll(Map<String, String> target, Map<String, String> newEnv) {
         for (Entry<String, String> cur : newEnv.entrySet()) {
             LOG.info(cur.getKey() + ":" + cur.getValue());
-            target.put(cur.getKey(), cur.getValue());
+            if (StringUtils.isNotBlank(cur.getKey()) && StringUtils.isNotBlank(cur.getValue())) {
+                target.put(cur.getKey(), cur.getValue());
+            }
         }
     }
     
@@ -301,6 +345,10 @@ public class CommonUtils {
             long memory = Long.parseLong(parseMemoryString(memoryString));
             int vCores = conf.getInt(GlobalConfigurationKeys.getVCoresKey(jobName),
                     GlobalConfigurationKeys.DEFAULT_VCORES);
+            // used for fault tolerance
+            int numBackupInstances = conf.getInt(GlobalConfigurationKeys.getBackupInstancesKey(jobName),
+                    GlobalConfigurationKeys.getDefaultInstances(jobName));
+            
             /*
              * The priority of different task types MUST be different.
              * Otherwise the requests will overwrite each other on the RM
@@ -309,7 +357,7 @@ public class CommonUtils {
              */
             if(numInstances > 0) {
                 containerRequests.put(jobName,
-                        new TensorFlowContainerRequest(jobName, numInstances, memory, vCores, priority++));
+                        new TensorFlowContainerRequest(jobName, numInstances, memory, vCores, priority++, numBackupInstances));
             }
         }
         return containerRequests;

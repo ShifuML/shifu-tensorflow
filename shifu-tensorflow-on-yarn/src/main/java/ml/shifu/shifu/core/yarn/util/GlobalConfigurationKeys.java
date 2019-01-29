@@ -124,4 +124,8 @@ public class GlobalConfigurationKeys {
     public static String getVCoresKey(String jobName) {
         return String.format(SHIFU_PREFIX + "%s.vcores", jobName);
     }
+    
+    public static String getBackupInstancesKey(String jobName) {
+        return String.format(SHIFU_PREFIX + "%s.instances.backup", jobName);
+    }
 }

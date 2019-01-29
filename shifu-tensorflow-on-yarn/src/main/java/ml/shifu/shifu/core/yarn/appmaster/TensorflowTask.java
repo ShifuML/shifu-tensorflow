@@ -36,12 +36,17 @@ public class TensorflowTask {
     /** The container the task is running in. Set once a container has been allocated for the task. */
     private Container container;
     private String trainingDataPaths; // data paths splited by ","
-    private String zookeeperServer;
 
+    private String zookeeperServer;
+    private boolean isBackup;
+    /** Task index in task array **/
+    private int arrayIndex;
+    
     private Configuration globalConf;
 
     public TensorflowTask(String jobName, String taskIndex, int sessionId, Container container,
-            String trainingDataPaths, String zookeeperServer, Configuration globalConf) {
+            String trainingDataPaths, String zookeeperServer, 
+            Configuration globalConf, boolean isBackup, int arrayIndex) {
         this.jobName = jobName;
         this.taskIndex = taskIndex;
         this.sessionId = sessionId;
@@ -49,6 +54,8 @@ public class TensorflowTask {
         this.trainingDataPaths = trainingDataPaths;
         this.zookeeperServer = zookeeperServer;
         this.globalConf = globalConf;
+        this.isBackup = isBackup;
+        this.arrayIndex = arrayIndex;
     }
 
     /** we get port only when job is executing, we will read it from zookeeper **/
@@ -83,7 +90,7 @@ public class TensorflowTask {
         return completed;
     }
 
-    int getExitStatus() {
+    public int getExitStatus() {
         return exitStatus;
     }
 
@@ -91,6 +98,21 @@ public class TensorflowTask {
         return this.container.getNodeId().getHost();
     }
 
+    public int getArrayIndex() {
+        return arrayIndex;
+    }
+    
+    public void setArrayIndex(int arrayIndex) {
+        this.arrayIndex = arrayIndex;
+    }
+    
+    public String getTrainingDataPaths() {
+        return trainingDataPaths;
+    }
+
+    public void setTrainingDataPaths(String trainingDataPaths) {
+        this.trainingDataPaths = trainingDataPaths;
+    }
 //    public String getHostNameAndPort() {
 //        return String.format("%s:%s", getHostName(), StringUtils.isBlank(tensorflowPort) ? 0 : tensorflowPort);
 //    }
@@ -119,9 +141,14 @@ public class TensorflowTask {
         cmd.append("$JAVA_HOME/bin/java ")
                 .append(globalConf.get(GlobalConfigurationKeys.TASK_EXECUTOR_JVM_OPTS, GlobalConfigurationKeys.DEFAULT_TASK_EXECUTOR_JVM_OPTS))
                 .append(" " + TensorflowTaskExecutor.class.getName() + " ")
-                .append(" --zookeeper_server ").append(zookeeperServer).append(" --job_name ").append(jobName)
-                .append(" --task_id ").append(taskIndex).append(" --container_id ").append(container.getId().toString())
-                .append(" --training_data_path ").append(this.trainingDataPaths);
+                .append(" --zookeeper_server ").append(zookeeperServer)
+                .append(" --job_name ").append(jobName)
+                .append(" --task_id ").append(taskIndex)
+                .append(" --container_id ").append(container.getId().toString())
+                .append(" --is_backup ").append(isBackup);
+        if (StringUtils.isNotBlank(trainingDataPaths)){
+            cmd.append(" --training_data_path ").append(trainingDataPaths);
+        }
         return cmd.toString();
     }
 

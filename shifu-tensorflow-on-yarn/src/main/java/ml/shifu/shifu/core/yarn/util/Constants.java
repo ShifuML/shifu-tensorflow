@@ -19,8 +19,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
-import org.apache.hadoop.yarn.api.records.ApplicationId;
-import org.apache.hadoop.yarn.conf.YarnConfiguration;
 
 import ml.shifu.shifu.util.HDFSUtils;
 
@@ -38,6 +36,7 @@ public class Constants {
     // file and CLI confs are combined. This file is uploaded to HDFS and localized to containers
     public static final String GLOBAL_FINAL_XML = "global-final.xml";
     public static final String JAR_LIB_PATH = "lib.zip";
+    public static final String BACKUP_SCRIPT = "/backup.py";
     
     public static final String AM_NAME = "am";
     public static final String WORKER_JOB_NAME = "worker";
@@ -68,11 +67,20 @@ public class Constants {
     // Zookeeper constants
     public static final String TENSORFLOW_CLUSTER_ROOT_PATH = "/tensorflow_cluster/";
     public static final String TENSORFLOW_FINAL_CLUSTER = "/tensorflow_cluster/final";
+    public static final String BACKUP_WEKAINGUP_FLAG_PREFIX = "/backup_training_data_path_"; // it will conbime with container_id
+    
+    public static final String getTrainingDataZookeeperPath(String containerId) {
+        return BACKUP_WEKAINGUP_FLAG_PREFIX + containerId;
+    }
     
     public static final String ATTEMPT_NUMBER = "ATTEMPT_NUMBER";
     public static final String HADOOP_CONF_DIR = ApplicationConstants.Environment.HADOOP_CONF_DIR.key();;
 
     public static final String CORE_SITE_CONF = "core-site.xml";
+    
+    /** if failed workers number smaller than workerFaultToleranceThreashold, we still consider session success **/
+    public static final double WORKER_FAULT_TOLERENANCE_THRESHOLD = 0.1d;
+    public static final double PS_FAULT_TOLERNANCE_THREAHOLD = 0.9d;
     
     public static final FileSystem hdfs = HDFSUtils.getFS();
     public static final Path getAppResourcePath(String appId) {

@@ -21,13 +21,15 @@ package ml.shifu.shifu.core.yarn.appmaster;
  */
 public class TensorFlowContainerRequest {
     private int numInstances;
+    private int numBackupInstances;
     private long memory;
     private int vCores;
     private int priority;
     private String jobName;
 
-    public TensorFlowContainerRequest(String jobName, int numInstances, long memory, int vCores, int priority) {
+    public TensorFlowContainerRequest(String jobName, int numInstances, long memory, int vCores, int priority, int numBackupInstances) {
       this.numInstances = numInstances;
+      this.numBackupInstances = numBackupInstances;
       this.memory = memory;
       this.vCores = vCores;
       this.priority = priority;
@@ -35,10 +37,12 @@ public class TensorFlowContainerRequest {
     }
 
     public TensorFlowContainerRequest(TensorFlowContainerRequest that) {
+      this.numInstances = that.numInstances;
       this.memory = that.memory;
       this.vCores = that.vCores;
       this.priority = that.priority;
       this.jobName = that.jobName;
+      this.numBackupInstances = that.numBackupInstances;
     }
 
     public int getNumInstances() {
@@ -60,4 +64,7 @@ public class TensorFlowContainerRequest {
     public String getJobName() {
       return jobName;
     }
-  }
+    public int getNumBackupInstances() {
+        return numBackupInstances;
+    }
+}
