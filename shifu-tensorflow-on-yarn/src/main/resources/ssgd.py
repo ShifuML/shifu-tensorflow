@@ -1,5 +1,4 @@
 """Synchronous SGD
-Author: Tommy Mulc
 """
 
 #from __future__ import print_function

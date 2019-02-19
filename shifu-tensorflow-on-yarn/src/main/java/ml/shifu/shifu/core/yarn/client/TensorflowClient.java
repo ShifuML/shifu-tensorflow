@@ -28,7 +28,6 @@ import java.util.Map;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -126,8 +125,8 @@ public class TensorflowClient implements AutoCloseable{
         maxHbMisses = globalConf.getInt(GlobalConfigurationKeys.TASK_MAX_MISSED_HEARTBEATS,
                 GlobalConfigurationKeys.DEFAULT_TASK_MAX_MISSED_HEARTBEATS);
 
-        LOG.info("TonY heartbeat interval [" + hbInterval + "]");
-        LOG.info("TonY max heartbeat misses allowed [" + maxHbMisses + "]");
+        LOG.info("heartbeat interval [" + hbInterval + "]");
+        LOG.info("max heartbeat misses allowed [" + maxHbMisses + "]");
 
         if(amMemory < 0) {
             throw new IllegalArgumentException(
@@ -208,7 +207,7 @@ public class TensorflowClient implements AutoCloseable{
         try {
             result = run();
         } catch (Exception e) {
-            LOG.fatal("Failed to run TonyClient", e);
+            LOG.fatal("Failed to run TensorflowClient", e);
             result = false;
         }
         if(result) {

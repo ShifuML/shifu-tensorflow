@@ -2,3 +2,5 @@
 .project
 .classpath
 .settings
+../glibc.zip
+../python_env.zip

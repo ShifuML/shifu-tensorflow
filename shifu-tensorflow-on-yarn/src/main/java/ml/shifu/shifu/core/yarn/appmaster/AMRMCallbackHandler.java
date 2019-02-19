@@ -175,40 +175,39 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
      */
     public void onContainersAllocated(List<Container> containers) {
         LOG.info("Allocated: " + containers.size() + " containers.");
-        for (Container container : containers) {
-          LOG.info("Launching a task in container"
-              + ", 3 = " + container.getId()
-              + ", containerNode = " + container.getNodeId().getHost() + ":" + container.getNodeId().getPort()
-              + ", resourceRequest = " + container.getResource());
-          TensorflowTask task = session.distributeTaskToContainer(container);       
-          Preconditions.checkNotNull(task, "Task was null! Nothing to schedule.");
-          
-          CommonUtils.printTaskUrl(task.getTaskUrl(), LOG);
-          
-          List<String> commands = new ArrayList<String>();
-          List<CharSequence> arguments = new ArrayList<CharSequence>(5);
-          
-          arguments.add(task.getTaskCommand());
-          arguments.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout");
-          arguments.add("2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr");
-          StringBuilder command = new StringBuilder();
-          for (CharSequence str : arguments) {
-            command.append(str).append(" ");
-          }
-          commands.add(command.toString());
-          LOG.info("Constructed command: " + commands);
-          
-          // Set logs to be readable by everyone.
-          Map<ApplicationAccessType, String> acls = new HashMap<ApplicationAccessType, String>(2);
-          acls.put(ApplicationAccessType.VIEW_APP, "*");
-          acls.put(ApplicationAccessType.MODIFY_APP, " ");
-          
-          ContainerLaunchContext ctx = ContainerLaunchContext.newInstance(containerResources, containerEnv,
-                  commands, null, null, acls);
+        for(Container container: containers) {
+            LOG.info("Launching a task in container" + ", 3 = " + container.getId() + ", containerNode = "
+                    + container.getNodeId().getHost() + ":" + container.getNodeId().getPort() + ", resourceRequest = "
+                    + container.getResource());
+            TensorflowTask task = session.distributeTaskToContainer(container);
+            Preconditions.checkNotNull(task, "Task was null! Nothing to schedule.");
 
-          ctx.setTokens(this.allTokens.slice());
-          
-          nmClientAsync.startContainerAsync(container, ctx);
+            CommonUtils.printTaskUrl(task.getTaskUrl(), LOG);
+
+            List<String> commands = new ArrayList<String>();
+            List<CharSequence> arguments = new ArrayList<CharSequence>(5);
+
+            arguments.add(task.getTaskCommand());
+            arguments.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout");
+            arguments.add("2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr");
+            StringBuilder command = new StringBuilder();
+            for(CharSequence str: arguments) {
+                command.append(str).append(" ");
+            }
+            commands.add(command.toString());
+            LOG.info("Constructed command: " + commands);
+
+            // Set logs to be readable by everyone.
+            Map<ApplicationAccessType, String> acls = new HashMap<ApplicationAccessType, String>(2);
+            acls.put(ApplicationAccessType.VIEW_APP, "*");
+            acls.put(ApplicationAccessType.MODIFY_APP, " ");
+
+            ContainerLaunchContext ctx = ContainerLaunchContext.newInstance(containerResources, containerEnv, commands,
+                    null, null, acls);
+
+            ctx.setTokens(this.allTokens.slice());
+
+            nmClientAsync.startContainerAsync(container, ctx);
         }
     }
 

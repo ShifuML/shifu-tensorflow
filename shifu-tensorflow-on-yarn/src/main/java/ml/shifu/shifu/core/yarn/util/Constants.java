@@ -68,6 +68,7 @@ public class Constants {
     public static final String TENSORFLOW_CLUSTER_ROOT_PATH = "/tensorflow_cluster/";
     public static final String TENSORFLOW_FINAL_CLUSTER = "/tensorflow_cluster/final";
     public static final String BACKUP_WEKAINGUP_FLAG_PREFIX = "/backup_training_data_path_"; // it will conbime with container_id
+    public static final String WORKER_INTERMEDIATE_RESULT_ROOT_PATH = "/worker_intermediate_result/";
     
     public static final String getTrainingDataZookeeperPath(String containerId) {
         return BACKUP_WEKAINGUP_FLAG_PREFIX + containerId;

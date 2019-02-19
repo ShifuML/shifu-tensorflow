@@ -15,9 +15,16 @@
  */
 package ml.shifu.shifu.core.yarn.util;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.zip.GZIPInputStream;
 
+import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.fs.ContentSummary;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -119,5 +126,48 @@ public class HdfsUtils {
                 givePerms(fs, file, recursive);
             }
         }
+    }
+    
+
+    /**
+     * @param fs 
+     *        FileSystem, 
+     *        paths
+     *        File paths in hdfs
+     * @return
+     *        total line number of all these files.
+     * @throws IOException 
+     */
+    public static long getFileLineCount(FileSystem fs, String paths) throws IOException {
+        long total = 0L;
+        if (StringUtils.isNotBlank(paths)) {
+            for (String path: paths.split(",")) {
+                Path p = new Path(path);
+                if (fs.exists(p)) {
+                    FSDataInputStream in = fs.open(p);
+                    if (path.endsWith(".gz")) {
+                        // If this is a compressed file
+                        GZIPInputStream gzis = new GZIPInputStream(in);
+                        byte[] buffer = new byte[1024];
+                        while(gzis.read(buffer) != -1) {
+                            String record = new String(buffer);
+                            int c = StringUtils.countMatches(record, StringUtils.LF);
+                            buffer = new byte[1024];
+                            total += c;
+                        }
+                    } else {
+                        BufferedReader d = new BufferedReader(new InputStreamReader(in));
+                        String line;
+                        while((line = d.readLine()) != null) {
+                            if (StringUtils.isNotBlank(line)) {
+                                total += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        LOG.info("File line count: " + total);
+        return total;
     }
 }

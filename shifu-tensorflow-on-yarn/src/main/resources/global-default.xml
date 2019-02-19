@@ -49,6 +49,7 @@
     <property>
     <description>Training data path on hdfs</description>
     <name>shifu.application.training-data-path</name>
+    <!-- <value>/user/pengzhang/ModelSets/cam2015-BNN/tmp/NormalizedData/</value> -->
     <value>/user/webai/tmp/data/</value>
   </property>
 
@@ -94,7 +95,7 @@
   <property>
     <description>Parameter server memory size, requested as a string (e.g. '2g' or '2048m').</description>
     <name>shifu.ps.memory</name>
-    <value>2g</value>
+    <value>4g</value>
   </property>
 
   <property>
@@ -108,13 +109,13 @@
     <name>shifu.ps.instances</name>
     <value>2</value>
   </property>
-
+<!-- 
   <property>
     <description>Number of back-up parameter servers to request.</description>
     <name>shifu.ps.instances.backup</name>
     <value>2</value>
   </property>
-
+-->
   <!-- Worker configurations -->
   <property>
     <description>Timeout, in milliseconds for the user's python processes before forcibly killing them.</description>
@@ -137,7 +138,7 @@
   <property>
     <description>Number of workers to request.</description>
     <name>shifu.worker.instances</name>
-    <value>2</value>
+    <value>3</value>
   </property>
 
   <property>
@@ -147,7 +148,6 @@
   </property>
 
   <!--History Server configurations-->
-  <!--All the configurations below should be set in $TONY_CONF_DIR/tony-site.xml-->
   <property>
     <description>
       Hostname of history server

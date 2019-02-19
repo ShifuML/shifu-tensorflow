@@ -37,7 +37,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.util.AbstractLivelinessMonitor;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 
-import ml.shifu.shifu.core.hadoop.MonotonicClock;
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
 import ml.shifu.shifu.core.yarn.util.Constants;
 import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
@@ -227,14 +226,21 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster{
                 break;
             }
             
-            if (session.getFailedPs().size() >= 
-                    session.getJobNameToBackupTask().get(Constants.PS_JOB_NAME).size() +
-                    session.getNumTotalPsTasks() * Constants.PS_FAULT_TOLERNANCE_THREAHOLD) {
-                LOG.info("Most ps fails, training process could not be continued..");
+            if (session.getFailedPs().size() > 0) {
+                LOG.info("Some PS fails, could not continue...");
                 break;
             }
             
-            if(session.getNumCompletedWorkerTasks().get() == this.session.getNumTotalWorkerTasks()) {
+            if(session.isChiefWorkerComplete()) {
+                LOG.info("Chief worker complete and success, so training process is over...");
+                return true;
+            }
+            
+            // we are not going to use this condition to judge training finish or not
+            //  because when chief worker finish, training would be finished. 
+            //  after then, the other worker will not change model anymore
+            /** TODO, remove
+            if (session.getNumCompletedWorkerTasks().get() == this.session.getNumTotalWorkerTasks()) {
                 // success
                 CommonUtils.printWorkerTasksCompleted(this.session.getNumCompletedWorkerTasks(),
                         this.session.getNumTotalWorkerTasks());
@@ -246,7 +252,7 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster{
                 CommonUtils.printWorkerTasksCompleted(this.session.getNumCompletedWorkerTasks(),
                         this.session.getNumTotalWorkerTasks());
             }
-
+             **/
             // Pause before refresh job status
             try {
                 Thread.sleep(5000);
@@ -265,8 +271,8 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster{
             return false;
         }
         
-        // if ps faild number bigger that left backup ps plus tolerance
-        if (session.getFailedPs().size() > session.failedPsMaxLimit()) {
+        // if any ps fails, cannot recover
+        if (session.getFailedPs().size() > 0) {
             return false;
         }
         

@@ -1,7 +1,41 @@
-"""Synchronous Accumulated Gradients Normalization (SGAN)
-Performs synchronous updates with gradients averaged
-over a time window.
-Author: Tommy Mulc
+# export model (on chief worker only)
+if args.mode == "train" and task_index == 0:
+    tf.reset_default_graph()
+
+    # add placeholders for input images (and optional labels)
+    x = tf.placeholder(tf.float32, [None, IMAGE_PIXELS * IMAGE_PIXELS], name='x')
+    y_ = tf.placeholder(tf.float32, [None, 10], name='y_')
+    label = tf.argmax(y_, 1, name="label")
+
+    # add core model
+    y, prediction = build_model(tf.get_default_graph(), x)
+
+    # restore from last checkpoint
+    saver = tf.train.Saver()
+    with tf.Session() as sess:
+        ckpt = tf.train.get_checkpoint_state(model_dir)
+        print("ckpt: {}".format(ckpt))
+        assert ckpt, "Invalid model checkpoint path: {}".format(model_dir)
+        saver.restore(sess, ckpt.model_checkpoint_path)
+
+        print("Exporting saved_model to: {}".format(export_dir))
+        # exported signatures defined in code
+        signatures = {
+            tf.saved_model.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY: {
+                'inputs': {'image': x},
+                'outputs': {'prediction': prediction},
+                'method_name': tf.saved_model.signature_constants.PREDICT_METHOD_NAME
+            }
+        }
+        TFNode.export_saved_model(sess,
+                                  export_dir,
+                                  tf.saved_model.tag_constants.SERVING,
+                                  signatures)
+        print("Exported saved_model")
+
+https://github.com/yahoo/TensorFlowOnSpark/blob/master/examples/mnist/tf/mnist_dist.py
+
+"""Synchronous SGD
 """
 
 from __future__ import print_function

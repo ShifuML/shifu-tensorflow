@@ -19,18 +19,14 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
-import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.commons.cli.Options;
 import org.apache.commons.lang3.StringUtils;
@@ -40,13 +36,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.yarn.api.ApplicationConstants;
-import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
-import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.Container;
-import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.api.records.LocalResourceType;
 import org.apache.hadoop.yarn.api.records.LocalResourceVisibility;
@@ -54,10 +45,9 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 
 import ml.shifu.guagua.GuaguaRuntimeException;
+import ml.shifu.guagua.coordinator.zk.ZooKeeperUtils;
 import ml.shifu.shifu.core.yarn.appmaster.TaskUrl;
 import ml.shifu.shifu.core.yarn.appmaster.TensorFlowContainerRequest;
-import ml.shifu.shifu.core.yarn.client.TensorflowClient;
-import ml.shifu.shifu.util.HDFSUtils;
 import net.lingala.zip4j.core.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 
@@ -265,12 +255,14 @@ public class CommonUtils {
         // For Testing
         Integer taskId = Integer.valueOf(env.get("TASK_ID"));
         String jobName = env.get("JOB_NAME");
-        if(timeout > 0 || (jobName.equals("ps") && taskId == 1)) {
-            taskProcess.waitFor(80000, TimeUnit.MILLISECONDS);
-            killProcessByPort("2181");
-            
-            taskProcess.destroyForcibly();
-            taskProcess.destroy();
+//        if(timeout > 0 || (jobName.equals("ps") && taskId == 1)) {
+//            taskProcess.waitFor(80000, TimeUnit.MILLISECONDS);
+//            killProcessByPort("2181");
+//            
+//            taskProcess.destroyForcibly();
+//            taskProcess.destroy();
+        if (timeout > 0) {
+            taskProcess.wait(timeout);
         } else {
             taskProcess.waitFor();
         }
@@ -346,8 +338,9 @@ public class CommonUtils {
             int vCores = conf.getInt(GlobalConfigurationKeys.getVCoresKey(jobName),
                     GlobalConfigurationKeys.DEFAULT_VCORES);
             // used for fault tolerance
+            // TODO: We do not support PS recover yet, so please do not config PS backup instances
             int numBackupInstances = conf.getInt(GlobalConfigurationKeys.getBackupInstancesKey(jobName),
-                    GlobalConfigurationKeys.getDefaultInstances(jobName));
+                    GlobalConfigurationKeys.getDefaultBackupInstances(jobName));
             
             /*
              * The priority of different task types MUST be different.
@@ -394,5 +387,28 @@ public class CommonUtils {
         }
     }
     
-    
+    final static int DEFAULT_TENSORFLOW_PORT = 2182;
+    public static final int TRY_PORT_COUNT = 20;
+
+    public static int getValidTensorflowPort() {
+        int zkValidPort =  DEFAULT_TENSORFLOW_PORT;
+        boolean success = false;
+        for(int i = 0; i <  TRY_PORT_COUNT; i++) {
+            try {
+                if(!ZooKeeperUtils.isServerAlive(InetAddress.getLocalHost(), zkValidPort)) {
+                    success = true;
+                    break;
+                }
+            } catch (UnknownHostException e) {
+                throw new RuntimeException(e);
+            }
+            zkValidPort += 1;
+        }
+        if (success) {
+            return zkValidPort;
+        } else {
+            throw new RuntimeException("Cannot find a empty port for tensorflow");
+        }
+        
+    }
 }

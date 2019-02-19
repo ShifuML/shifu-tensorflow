@@ -26,7 +26,6 @@ import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 
-import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
 import ml.shifu.shifu.util.HDFSUtils;
 
 /**

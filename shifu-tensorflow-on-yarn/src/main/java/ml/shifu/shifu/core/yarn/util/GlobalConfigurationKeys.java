@@ -128,4 +128,8 @@ public class GlobalConfigurationKeys {
     public static String getBackupInstancesKey(String jobName) {
         return String.format(SHIFU_PREFIX + "%s.instances.backup", jobName);
     }
+    
+    public static int getDefaultBackupInstances(String jobName) {
+        return 0;
+    }
 }

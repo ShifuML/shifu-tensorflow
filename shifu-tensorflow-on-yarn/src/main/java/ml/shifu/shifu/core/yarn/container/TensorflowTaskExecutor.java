@@ -42,7 +42,6 @@ import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooDefs.Ids;
 
 import ml.shifu.guagua.coordinator.zk.GuaguaZooKeeper;
-import ml.shifu.guagua.coordinator.zk.ZooKeeperUtils;
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
 import ml.shifu.shifu.core.yarn.util.Constants;
 import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
@@ -69,6 +68,8 @@ public class TensorflowTaskExecutor implements Watcher {
     /** Use for reserve port for tensorflow cluster **/
     private ServerSocket tensorflowSocket;
     private String tensorflowPort;
+    /** Use for communicate between python program and java **/
+    private SocketServer socketServer;
     
     private Configuration globalConf = new Configuration();
 
@@ -140,7 +141,7 @@ public class TensorflowTaskExecutor implements Watcher {
     }
 
     public String getTensorflowPort() throws IOException {
-        tensorflowSocket = new ServerSocket(ZooKeeperUtils.getValidZooKeeperPort());
+        tensorflowSocket = new ServerSocket(CommonUtils.getValidTensorflowPort());
     
         return Integer.toString(this.tensorflowSocket.getLocalPort());
     }
@@ -154,6 +155,7 @@ public class TensorflowTaskExecutor implements Watcher {
         opts.addOption("training_data_path", true, "");
         opts.addOption("zookeeper_server", true, "");
         opts.addOption("is_backup", true, "");
+        opts.addOption("first_worker_data_length", true, "");
         
         return new GnuParser().parse(opts, args);
     }
@@ -163,6 +165,7 @@ public class TensorflowTaskExecutor implements Watcher {
         shellEnv.put("JOB_NAME", cliParser.getOptionValue("job_name")); // worker or ps
         shellEnv.put("TASK_ID", cliParser.getOptionValue("task_id"));
         shellEnv.put("TRAINING_DATA_PATH", cliParser.getOptionValue("training_data_path")); // /path/a,/path/b
+        shellEnv.put("FIRST_WORKER_DATA_LENGTH", cliParser.getOptionValue("first_worker_data_length"));
         shellEnv.put("WEIGHT_COLUMN_NUM", globalConf.get(GlobalConfigurationKeys.WEIGHT_COLUMN_NUM,
                 GlobalConfigurationKeys.DEFAULT_WEIGHT_COLUMN_NUM)); // default is -1.
         shellEnv.put("MODEL_OUTPUT", "./models");
@@ -171,7 +174,12 @@ public class TensorflowTaskExecutor implements Watcher {
         isBackup = Boolean.valueOf(cliParser.getOptionValue("is_backup"));
         
         String zookeeperServer = cliParser.getOptionValue("zookeeper_server");
-        zookeeper = new GuaguaZooKeeper(zookeeperServer, 300000, 5, 1000, this);    
+        zookeeper = new GuaguaZooKeeper(zookeeperServer, 3000000, 5, 1000, this);    
+        
+        // start socket server so that python could connect to this server to sending message
+        socketServer = new SocketServer(zookeeper, containerId);
+        socketServer.start();
+        shellEnv.put("SOCKET_SERVER_PORT", Integer.toString(socketServer.getServerPort()));
     }
 
     public void prepare() throws IOException {
@@ -208,6 +216,11 @@ public class TensorflowTaskExecutor implements Watcher {
         pythonScriptDst = "." + pythonScriptPath;
         Files.copy(this.getClass().getResourceAsStream(pythonScriptPath), 
                 Paths.get(pythonScriptDst), StandardCopyOption.REPLACE_EXISTING);
+        
+        // Since there is backup workers in cluster, we need this to get real worker number
+        int numInstances = globalConf.getInt(GlobalConfigurationKeys.getInstancesKey(Constants.WORKER_JOB_NAME),
+                GlobalConfigurationKeys.getDefaultInstances(Constants.WORKER_JOB_NAME));
+        shellEnv.put("WORKER_CNT", Integer.toString(numInstances));
 
     }
     /**
@@ -274,6 +287,9 @@ public class TensorflowTaskExecutor implements Watcher {
         }
 
         executor.run();
+        
+        LOG.info("current worker finish..");
+        System.exit(0);
     }
     
     public boolean isBackup() {

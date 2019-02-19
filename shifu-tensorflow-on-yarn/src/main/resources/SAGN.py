@@ -1,7 +1,6 @@
 """Synchronous Accumulated Gradients Normalization (SGAN)
 Performs synchronous updates with gradients averaged
 over a time window.
-Author: Tommy Mulc
 """
 
 from __future__ import print_function
