@@ -84,11 +84,19 @@ public class GlobalConfigurationKeys {
     public static final String WEIGHT_COLUMN_NUM = SHIFU_APPLICATION_PREFIX + "weight-column-number";
     public static final String DEFAULT_WEIGHT_COLUMN_NUM = "-1";
     
+    public static final String PYTHON_ENV_ZIP = SHIFU_APPLICATION_PREFIX + "python-env-zip";
     public static final String PYTHON_BINARY_PATH = SHIFU_APPLICATION_PREFIX + "python-binary-path";
+    public static final String GLIBC_ENV_ZIP = SHIFU_APPLICATION_PREFIX + "glibc-env-zip";
     public static final String GLIBC_BINARY_PATH = SHIFU_APPLICATION_PREFIX + "glibc-binary-path";
     public static final String PYTHON_SCRIPT_PATH = SHIFU_APPLICATION_PREFIX + "python-script-path";
-    public static final String SHIFU_YARN_APP_JAR = SHIFU_APPLICATION_PREFIX + "app-jar-path";
-
+    public static final String PYTHON_SHELL_PATH = SHIFU_APPLICATION_PREFIX + "python-shell-path";
+    
+    public static final String MODEL_CONF = SHIFU_APPLICATION_PREFIX + "model-conf";
+    public static final String COLUMN_CONF = SHIFU_APPLICATION_PREFIX + "column-conf";
+    
+    // user could point out extra jars
+    public static final String SHIFU_YARN_LIB_JAR = SHIFU_APPLICATION_PREFIX + "lib-jar";
+    
     // Keys/default values for configurable TensorFlow job names
     public static final String INSTANCES_REGEX = "shifu\\.([a-z]+)\\.instances";
     public static final String DEFAULT_MEMORY = "2g";

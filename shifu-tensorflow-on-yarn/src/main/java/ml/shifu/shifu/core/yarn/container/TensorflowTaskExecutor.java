@@ -75,8 +75,9 @@ public class TensorflowTaskExecutor implements Watcher {
 
     private Map<String, String> shellEnv = new HashMap<String, String>();
 
-    private String pythonScriptDst;
-
+    private String pythonScript;
+    private String pythonShell;
+    
     /** Process of executing back-up python script **/
     private Process backupProcess;
 
@@ -203,19 +204,14 @@ public class TensorflowTaskExecutor implements Watcher {
         shellEnv.put("GLIBC_HOME", "." + glibcBinaryPath);
         shellEnv.put("PYTHON_HOME", "." + pythonBinaryPath);
         
-        // Copy shell from jar so that we could execute
-        Files.copy(this.getClass().getResourceAsStream("/pytrain.sh"), 
-                Paths.get("./pytrain.sh"), StandardCopyOption.REPLACE_EXISTING);
-        HdfsUtils.givePerms(HDFSUtils.getLocalFS(), new File("./pytrain.sh"), true);
-        
         // Copy backup script so that we could execute
+        // We put backup script into yarn.jar due to user no need to touch it
         Files.copy(this.getClass().getResourceAsStream(Constants.BACKUP_SCRIPT), 
                 Paths.get("." + Constants.BACKUP_SCRIPT), StandardCopyOption.REPLACE_EXISTING);
         
-        String pythonScriptPath = globalConf.get(GlobalConfigurationKeys.PYTHON_SCRIPT_PATH);
-        pythonScriptDst = "." + pythonScriptPath;
-        Files.copy(this.getClass().getResourceAsStream(pythonScriptPath), 
-                Paths.get(pythonScriptDst), StandardCopyOption.REPLACE_EXISTING);
+        pythonScript = "./" + new Path(globalConf.get(GlobalConfigurationKeys.PYTHON_SCRIPT_PATH)).getName();
+        pythonShell = "./" + new Path(globalConf.get(GlobalConfigurationKeys.PYTHON_SHELL_PATH)).getName();
+        HdfsUtils.givePerms(HDFSUtils.getLocalFS(), new File(pythonShell), true);
         
         // Since there is backup workers in cluster, we need this to get real worker number
         int numInstances = globalConf.getInt(GlobalConfigurationKeys.getInstancesKey(Constants.WORKER_JOB_NAME),
@@ -251,13 +247,13 @@ public class TensorflowTaskExecutor implements Watcher {
      * @throws IOException
      */
     public void run() throws IOException, InterruptedException {    
-        shellEnv.put("TRAIN_SCRIPT_PATH", pythonScriptDst);
+        shellEnv.put("TRAIN_SCRIPT_PATH", pythonScript);
         
         if (!tensorflowSocket.isClosed()) {
             tensorflowSocket.close();
         }
 
-        CommonUtils.executeShell("./pytrain.sh", 0, shellEnv);
+        CommonUtils.executeShell(pythonShell, 0, shellEnv);
     }
     
     public static void main(String[] args) throws Exception {
