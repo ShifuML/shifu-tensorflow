@@ -132,6 +132,9 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster{
             opts.addOption("container_env", true, "");
             CommandLine cliParser = new GnuParser().parse(opts, args);
             containerEnv.putAll(CommonUtils.parseKeyValue(cliParser.getOptionValues("container_env")));
+            
+            //TODO parsing columnconfig file to pick out selected column number
+            
         } catch (ParseException e) {
             throw new IllegalStateException("Parsing app master arguments fails", e); 
         }

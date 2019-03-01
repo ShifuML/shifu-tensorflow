@@ -36,7 +36,6 @@ public class TensorflowTask {
     /** The container the task is running in. Set once a container has been allocated for the task. */
     private Container container;
     private String trainingDataPaths; // data paths splited by ","
-    private long firstWorkerDataLength;
     
     private String zookeeperServer;
     private boolean isBackup;
@@ -46,14 +45,11 @@ public class TensorflowTask {
     private Configuration globalConf;
 
     public TensorflowTask(String jobName, String taskIndex, int sessionId, Container container,
-            String trainingDataPaths, long firstWorkerDataLength, String zookeeperServer, 
-            Configuration globalConf, boolean isBackup, int arrayIndex) {
+            String zookeeperServer, Configuration globalConf, boolean isBackup, int arrayIndex) {
         this.jobName = jobName;
         this.taskIndex = taskIndex;
         this.sessionId = sessionId;
         this.container = container;
-        this.trainingDataPaths = trainingDataPaths;
-        this.firstWorkerDataLength = firstWorkerDataLength;
         this.zookeeperServer = zookeeperServer;
         this.globalConf = globalConf;
         this.isBackup = isBackup;
@@ -147,8 +143,7 @@ public class TensorflowTask {
                 .append(" --job_name ").append(jobName)
                 .append(" --task_id ").append(taskIndex)
                 .append(" --container_id ").append(container.getId().toString())
-                .append(" --is_backup ").append(isBackup)
-                .append(" --first_worker_data_length ").append(Long.toString(firstWorkerDataLength));
+                .append(" --is_backup ").append(isBackup);
         if (StringUtils.isNotBlank(trainingDataPaths)){
             cmd.append(" --training_data_path ").append(trainingDataPaths);
         }

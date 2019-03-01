@@ -49,8 +49,8 @@ public class Constants {
     public static final String YARN_TMP = "tmp";
     public static final String SHIFU_TENSORFLOW_HDFS_DIR = "shifu_tensorflow";
     
-    public static final String PYTHON_VENV_ZIP = "pythonvenv.zip";
-    public static final String GLIBC_VENV_ZIP = "glibcvenv.zip";
+    public static final String PYTHON_VENV_ZIP = "python_env.zip";
+    public static final String GLIBC_VENV_ZIP = "glibc.zip";
     public static final String SHIFU_HISTORY_INTERMEDIATE = "intermediate";
     
     // History Server related constants

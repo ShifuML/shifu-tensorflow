@@ -86,8 +86,6 @@ public class TensorflowSession implements Watcher {
 
     /** train data set **/
     private List<StringBuilder> splitedTrainingData = null;
-    /** use this to estimate total data volumn **/
-    private long firstWorkerDataLength;
 
     /** Job progress **/
     private boolean isChiefWorkerComplete = false;
@@ -157,9 +155,6 @@ public class TensorflowSession implements Watcher {
                     jobNameToTaskNum.get(Constants.WORKER_JOB_NAME),
                     globalConf.get(GlobalConfigurationKeys.TRAINING_DATA_PATH));
             LOG.info("splitedTrainingData: " + splitedTrainingData.toString());
-            // Use to get first workers training data volumns 
-            firstWorkerDataLength = HdfsUtils.getFileLineCount(HDFSUtils.getFS(), 
-                    splitedTrainingData.get(0).toString());
         } catch (Exception e) {
             LOG.error("Splitting training data fails or count file line fails!", e);
             throw new RuntimeException(e);
@@ -241,10 +236,14 @@ public class TensorflowSession implements Watcher {
                 TensorflowTask[] tasks = jobNameToTasks.get(jobName);
                 for(int i = 0; i < tasks.length; i++) {
                     if(tasks[i] == null) {
-                        tasks[i] = new TensorflowTask(jobName, String.valueOf(i), sessionId, container,
-                                splitedTrainingData.get(i).toString(), firstWorkerDataLength, zookeeperServerHostPort, 
-                                globalConf, false, i);
+                        tasks[i] = new TensorflowTask(jobName, String.valueOf(i), sessionId, 
+                                container, zookeeperServerHostPort, globalConf, false, i);
 
+                        if (Constants.WORKER_JOB_NAME.equalsIgnoreCase(jobName)) {
+                            // Only worker has training data
+                            tasks[i].setTrainingDataPaths(splitedTrainingData.get(i).toString());
+                        }
+                        
                         jobNameToPendingTaskNumber.put(jobName, jobNameToPendingTaskNumber.get(jobName) - 1);
                         containerIdToTask.put(containerId, tasks[i]);
                         return tasks[i];
@@ -254,7 +253,7 @@ public class TensorflowSession implements Watcher {
                 // distribute container to backup task
                 int taskId = jobNameToTaskNum.get(jobName) + jobNameToBackupTask.get(jobName).size();
                 TensorflowTask task = new TensorflowTask(jobName, String.valueOf(taskId), sessionId, container,
-                        null, firstWorkerDataLength, zookeeperServerHostPort, globalConf, true, -1);
+                        zookeeperServerHostPort, globalConf, true, -1);
 
                 jobNameToBackupTask.get(jobName).offer(task);
                 jobNameToPendingBackupTaskNumber.put(jobName, jobNameToPendingBackupTaskNumber.get(jobName) - 1);
