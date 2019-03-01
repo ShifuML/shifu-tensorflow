@@ -15,6 +15,8 @@
  */
 package ml.shifu.shifu.core.yarn.util;
 
+import org.apache.commons.lang3.StringUtils;
+
 /**
  * @author webai
  *
@@ -75,20 +77,32 @@ public class GlobalConfigurationKeys {
 
     public static final String TASK_MAX_MISSED_HEARTBEATS = SHIFU_TASK_PREFIX + "max-missed-heartbeats";
     public static final int DEFAULT_TASK_MAX_MISSED_HEARTBEATS = 25;
-    
-    public static final String HDFS_CONF_LOCATION = SHIFU_APPLICATION_PREFIX + "hdfs-conf-path";
-
-    public static final String YARN_CONF_LOCATION = SHIFU_APPLICATION_PREFIX + "yarn-conf-path";
 
     public static final String TRAINING_DATA_PATH = SHIFU_APPLICATION_PREFIX + "training-data-path";
     public static final String WEIGHT_COLUMN_NUM = SHIFU_APPLICATION_PREFIX + "weight-column-number";
+    public static final String TARGET_COLUMN_NUM = SHIFU_APPLICATION_PREFIX + "target-column-number";
+    public static final String SELECTED_COLUMN_NUMS = SHIFU_APPLICATION_PREFIX + "selected-column-numbers";
+    public static final String TOTAL_TRAINING_DATA_NUM = SHIFU_APPLICATION_PREFIX + "total-training-data-number";
     public static final String DEFAULT_WEIGHT_COLUMN_NUM = "-1";
+    public static final String DEFAULT_TARGET_COLUMN_NUM = "0";
+    public static final String DEFAULT_SELECTED_COLUMN_NUMS = StringUtils.EMPTY;
     
+    public static final String TMP_MODEL_PATH = SHIFU_APPLICATION_PREFIX + "tmp-model-path";
+    public static final String FINAL_MODEL_PATH = SHIFU_APPLICATION_PREFIX + "final-model-path";
+    
+    public static final String PYTHON_ENV_ZIP = SHIFU_APPLICATION_PREFIX + "python-env-zip";
     public static final String PYTHON_BINARY_PATH = SHIFU_APPLICATION_PREFIX + "python-binary-path";
+    public static final String GLIBC_ENV_ZIP = SHIFU_APPLICATION_PREFIX + "glibc-env-zip";
     public static final String GLIBC_BINARY_PATH = SHIFU_APPLICATION_PREFIX + "glibc-binary-path";
     public static final String PYTHON_SCRIPT_PATH = SHIFU_APPLICATION_PREFIX + "python-script-path";
-    public static final String SHIFU_YARN_APP_JAR = SHIFU_APPLICATION_PREFIX + "app-jar-path";
-
+    public static final String PYTHON_SHELL_PATH = SHIFU_APPLICATION_PREFIX + "python-shell-path";
+    
+    public static final String MODEL_CONF = SHIFU_APPLICATION_PREFIX + "model-conf";
+    public static final String COLUMN_CONF = SHIFU_APPLICATION_PREFIX + "column-conf";
+    
+    // user could point out extra jars
+    public static final String SHIFU_YARN_LIB_JAR = SHIFU_APPLICATION_PREFIX + "lib-jar";
+    
     // Keys/default values for configurable TensorFlow job names
     public static final String INSTANCES_REGEX = "shifu\\.([a-z]+)\\.instances";
     public static final String DEFAULT_MEMORY = "2g";

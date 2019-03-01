@@ -15,6 +15,8 @@
  */
 package ml.shifu.shifu.core.yarn.util;
 
+import java.io.File;
+
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -35,16 +37,20 @@ public class Constants {
     // global-internal file name for final configurations, after user-provided configuration
     // file and CLI confs are combined. This file is uploaded to HDFS and localized to containers
     public static final String GLOBAL_FINAL_XML = "global-final.xml";
-    public static final String JAR_LIB_PATH = "lib.zip";
+    public static final String JAR_LIB_ROOT = "lib";
+    public static final String JAR_LIB_ZIP = "lib.zip";
     public static final String BACKUP_SCRIPT = "/backup.py";
     
     public static final String AM_NAME = "am";
     public static final String WORKER_JOB_NAME = "worker";
     public static final String PS_JOB_NAME = "ps";
     
-    public static final String SHIFU_TENSORFLOW_FOLDER = ".shifu_tensorflow";
-    public static final String PYTHON_VENV_ZIP = "pythonvenv.zip";
-    public static final String GLIBC_VENV_ZIP = "glibcvenv.zip";
+    //public static final String SHIFU_TENSORFLOW_FOLDER = ".shifu_tensorflow";
+    public static final String YARN_TMP = "tmp";
+    public static final String SHIFU_TENSORFLOW_HDFS_DIR = "shifu_tensorflow";
+    
+    public static final String PYTHON_VENV_ZIP = "python_env.zip";
+    public static final String GLIBC_VENV_ZIP = "glibc.zip";
     public static final String SHIFU_HISTORY_INTERMEDIATE = "intermediate";
     
     // History Server related constants
@@ -85,12 +91,7 @@ public class Constants {
     
     public static final FileSystem hdfs = HDFSUtils.getFS();
     public static final Path getAppResourcePath(String appId) {
-        return new Path(hdfs.getHomeDirectory(),
-                Constants.SHIFU_TENSORFLOW_FOLDER + Path.SEPARATOR + appId);
-    }
-    
-    public static final Path getGlobalResourcePath() {
-        return new Path(hdfs.getHomeDirectory(), Constants.SHIFU_TENSORFLOW_FOLDER);
+        return new Path(new Path(File.separator + YARN_TMP, SHIFU_TENSORFLOW_HDFS_DIR), appId);
     }
     
     public static String getClientResourcesPath(String appId, String fileName) {

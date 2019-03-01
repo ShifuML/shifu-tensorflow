@@ -169,6 +169,7 @@ public class CommonUtils {
             LocalResourceType resourceType, String resourceKey) {
         FileStatus scFileStatus;
         try {
+            path = hdfs.makeQualified(path);
             scFileStatus = hdfs.getFileStatus(path);
             LocalResource scRsrc = LocalResource.newInstance(ConverterUtils.getYarnUrlFromURI(path.toUri()),
                     resourceType, LocalResourceVisibility.APPLICATION, scFileStatus.getLen(),

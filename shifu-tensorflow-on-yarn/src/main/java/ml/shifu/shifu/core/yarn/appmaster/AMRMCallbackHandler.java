@@ -79,7 +79,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
     
     // resource folder on hdfs
     private Path appResourcesPath;
-    private Path globalResourcesPath;
     
     public AMRMCallbackHandler(Configuration globalConf, 
             TensorflowSession session, 
@@ -94,7 +93,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
         this.containerEnv = containerEnv;
         
         appResourcesPath = Constants.getAppResourcePath(appId);
-        globalResourcesPath = Constants.getGlobalResourcePath();
         
         // All resources available to all containers
         String[] resources = globalConf.getStrings(GlobalConfigurationKeys.getContainerResourcesKey());
@@ -111,23 +109,23 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
                 Constants.GLOBAL_FINAL_XML);
         
         // Add lib jar from hdfs to local resource
-        CommonUtils.addResource(new Path(this.globalResourcesPath, Constants.JAR_LIB_PATH), 
+        CommonUtils.addResource(new Path(this.appResourcesPath, Constants.JAR_LIB_ZIP), 
                 containerResources, 
                 hdfs,
                 LocalResourceType.ARCHIVE,
-                "lib");
+                Constants.JAR_LIB_ROOT);
         
-        // add self jar that container needed from hdfs to resource map
-        try {
-            String localAppJarPath = globalConf.get(GlobalConfigurationKeys.SHIFU_YARN_APP_JAR);
-            CommonUtils.addResource(new Path(this.appResourcesPath, new File(localAppJarPath).getName()),
-                    containerResources,
-                    hdfs,
-                    LocalResourceType.FILE,
-                    new File(localAppJarPath).getName());
-        } catch (Exception e) {
-            LOG.error("Error getting local app jar path.", e);
-        }
+//        // add self jar that container needed from hdfs to resource map
+//        try {
+//            String localAppJarPath = globalConf.get(GlobalConfigurationKeys.SHIFU_YARN_APP_JAR);
+//            CommonUtils.addResource(new Path(this.appResourcesPath, new File(localAppJarPath).getName()),
+//                    containerResources,
+//                    hdfs,
+//                    LocalResourceType.FILE,
+//                    new File(localAppJarPath).getName());
+//        } catch (Exception e) {
+//            LOG.error("Error getting local app jar path.", e);
+//        }
         
         getAllTokens();
     }

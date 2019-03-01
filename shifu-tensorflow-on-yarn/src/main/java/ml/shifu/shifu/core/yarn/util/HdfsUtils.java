@@ -139,6 +139,7 @@ public class HdfsUtils {
      * @throws IOException 
      */
     public static long getFileLineCount(FileSystem fs, String paths) throws IOException {
+        //TODO We could get line count from column config
         long total = 0L;
         if (StringUtils.isNotBlank(paths)) {
             for (String path: paths.split(",")) {

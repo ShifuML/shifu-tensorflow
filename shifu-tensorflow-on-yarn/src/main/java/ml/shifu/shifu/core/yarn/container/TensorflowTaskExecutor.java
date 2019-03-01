@@ -75,8 +75,9 @@ public class TensorflowTaskExecutor implements Watcher {
 
     private Map<String, String> shellEnv = new HashMap<String, String>();
 
-    private String pythonScriptDst;
-
+    private String pythonScript;
+    private String pythonShell;
+    
     /** Process of executing back-up python script **/
     private Process backupProcess;
 
@@ -155,7 +156,6 @@ public class TensorflowTaskExecutor implements Watcher {
         opts.addOption("training_data_path", true, "");
         opts.addOption("zookeeper_server", true, "");
         opts.addOption("is_backup", true, "");
-        opts.addOption("first_worker_data_length", true, "");
         
         return new GnuParser().parse(opts, args);
     }
@@ -165,10 +165,17 @@ public class TensorflowTaskExecutor implements Watcher {
         shellEnv.put("JOB_NAME", cliParser.getOptionValue("job_name")); // worker or ps
         shellEnv.put("TASK_ID", cliParser.getOptionValue("task_id"));
         shellEnv.put("TRAINING_DATA_PATH", cliParser.getOptionValue("training_data_path")); // /path/a,/path/b
-        shellEnv.put("FIRST_WORKER_DATA_LENGTH", cliParser.getOptionValue("first_worker_data_length"));
+        // total training data count
+        shellEnv.put("TOTAL_TRAINING_DATA_NUMBER", globalConf.get(GlobalConfigurationKeys.TOTAL_TRAINING_DATA_NUM));
         shellEnv.put("WEIGHT_COLUMN_NUM", globalConf.get(GlobalConfigurationKeys.WEIGHT_COLUMN_NUM,
                 GlobalConfigurationKeys.DEFAULT_WEIGHT_COLUMN_NUM)); // default is -1.
-        shellEnv.put("MODEL_OUTPUT", "./models");
+        shellEnv.put("TARGET_COLUMN_NUM", globalConf.get(GlobalConfigurationKeys.TARGET_COLUMN_NUM,
+                GlobalConfigurationKeys.DEFAULT_TARGET_COLUMN_NUM)); 
+        shellEnv.put("SELECTED_COLUMN_NUMS", globalConf.get(GlobalConfigurationKeys.SELECTED_COLUMN_NUMS,
+                GlobalConfigurationKeys.DEFAULT_SELECTED_COLUMN_NUMS)); 
+        
+        shellEnv.put("TMP_MODEL_PATH", globalConf.get(GlobalConfigurationKeys.TMP_MODEL_PATH));
+        shellEnv.put("FINAL_MODEL_PATH", globalConf.get(GlobalConfigurationKeys.FINAL_MODEL_PATH));
         
         containerId = cliParser.getOptionValue("container_id").trim();
         isBackup = Boolean.valueOf(cliParser.getOptionValue("is_backup"));
@@ -203,19 +210,14 @@ public class TensorflowTaskExecutor implements Watcher {
         shellEnv.put("GLIBC_HOME", "." + glibcBinaryPath);
         shellEnv.put("PYTHON_HOME", "." + pythonBinaryPath);
         
-        // Copy shell from jar so that we could execute
-        Files.copy(this.getClass().getResourceAsStream("/pytrain.sh"), 
-                Paths.get("./pytrain.sh"), StandardCopyOption.REPLACE_EXISTING);
-        HdfsUtils.givePerms(HDFSUtils.getLocalFS(), new File("./pytrain.sh"), true);
-        
         // Copy backup script so that we could execute
+        // We put backup script into yarn.jar due to user no need to touch it
         Files.copy(this.getClass().getResourceAsStream(Constants.BACKUP_SCRIPT), 
                 Paths.get("." + Constants.BACKUP_SCRIPT), StandardCopyOption.REPLACE_EXISTING);
         
-        String pythonScriptPath = globalConf.get(GlobalConfigurationKeys.PYTHON_SCRIPT_PATH);
-        pythonScriptDst = "." + pythonScriptPath;
-        Files.copy(this.getClass().getResourceAsStream(pythonScriptPath), 
-                Paths.get(pythonScriptDst), StandardCopyOption.REPLACE_EXISTING);
+        pythonScript = "./" + new Path(globalConf.get(GlobalConfigurationKeys.PYTHON_SCRIPT_PATH)).getName();
+        pythonShell = "./" + new Path(globalConf.get(GlobalConfigurationKeys.PYTHON_SHELL_PATH)).getName();
+        HdfsUtils.givePerms(HDFSUtils.getLocalFS(), new File(pythonShell), true);
         
         // Since there is backup workers in cluster, we need this to get real worker number
         int numInstances = globalConf.getInt(GlobalConfigurationKeys.getInstancesKey(Constants.WORKER_JOB_NAME),
@@ -234,7 +236,7 @@ public class TensorflowTaskExecutor implements Watcher {
         shellEnv.put("IS_BACKUP", "True");
         
         tensorflowSocket.close();
-        backupProcess = CommonUtils.executeShellAndGetProcess("./pytrain.sh", shellEnv);
+        backupProcess = CommonUtils.executeShellAndGetProcess(pythonShell, shellEnv);
         backupProcess.waitFor();
         
         // 137 mean killed by ourselves
@@ -251,13 +253,13 @@ public class TensorflowTaskExecutor implements Watcher {
      * @throws IOException
      */
     public void run() throws IOException, InterruptedException {    
-        shellEnv.put("TRAIN_SCRIPT_PATH", pythonScriptDst);
+        shellEnv.put("TRAIN_SCRIPT_PATH", pythonScript);
         
         if (!tensorflowSocket.isClosed()) {
             tensorflowSocket.close();
         }
 
-        CommonUtils.executeShell("./pytrain.sh", 0, shellEnv);
+        CommonUtils.executeShell(pythonShell, 0, shellEnv);
     }
     
     public static void main(String[] args) throws Exception {

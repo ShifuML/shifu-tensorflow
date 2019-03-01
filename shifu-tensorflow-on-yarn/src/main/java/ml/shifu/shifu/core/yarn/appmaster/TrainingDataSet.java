@@ -79,6 +79,10 @@ public class TrainingDataSet {
             cursor = (cursor + 1) % this.workerNum;
         }
         
+        if (splitedFilePaths.size() < workerNum) {
+            throw new RuntimeException("Training data file count is smaller than worker number, this will make some workers do not have training data!");
+        }
+        
         return splitedFilePaths;
     }
 
