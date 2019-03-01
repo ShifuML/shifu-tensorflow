@@ -68,7 +68,6 @@ import org.apache.hadoop.yarn.util.Records;
 
 import com.google.common.collect.ImmutableList;
 
-import ml.shifu.shifu.core.HelloWorld;
 import ml.shifu.shifu.core.yarn.appmaster.TensorflowApplicationMaster;
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
 import ml.shifu.shifu.core.yarn.util.Constants;
