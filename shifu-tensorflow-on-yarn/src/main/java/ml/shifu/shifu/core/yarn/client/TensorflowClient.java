@@ -116,7 +116,7 @@ public class TensorflowClient implements AutoCloseable{
     public TensorflowClient(Configuration conf) {
         globalConf = conf;
         yarnConf = new YarnConfiguration();
-        LOG.info("yarnConf:" + yarnConf.toString());
+        LOG.info("Client yarn configuration:" + yarnConf.toString());
     }
 
     public TensorflowClient() {
@@ -179,8 +179,6 @@ public class TensorflowClient implements AutoCloseable{
         
         //zipParameters.setRootFolderInZip(Constants.JAR_LIB_ROOT);
         for (String jar : jars) {
-            LOG.info(jar);
-            LOG.info(jar.indexOf(':'));
             String path = jar.substring(jar.indexOf(':')+1);
             File jarFile = new File(path);
             //zipParameters.setDefaultFolderPath(path.substring(0, path.lastIndexOf('/')));
