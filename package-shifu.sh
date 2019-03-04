@@ -16,6 +16,11 @@ if [ ${MAVEN} != "" ]; then
     ${MAVEN} -DskipTests clean install
 fi
 
+SHIFU_PACKAGE_PATH=`find . -iname shifu*-hdp-yarn.tar.gz`
+if [ ${SHIFU_PACKAGE_PATH} != "" ]; then 
+    rm -fr $SHIFU_PACKAGE_PATH
+fi
+
 cd ..
 
 SHIFU_PACKAGE_PATH=`find . -iname shifu*-hdp-yarn.tar.gz`
