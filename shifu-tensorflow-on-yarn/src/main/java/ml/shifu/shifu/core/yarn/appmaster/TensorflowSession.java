@@ -56,6 +56,7 @@ import ml.shifu.guagua.coordinator.zk.ZooKeeperUtils;
 import ml.shifu.shifu.core.TrainingIntermediateResult;
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
 import ml.shifu.shifu.core.yarn.util.Constants;
+import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
 
 /**
  * Tensorflow Session contains all tensorflow jobs information
