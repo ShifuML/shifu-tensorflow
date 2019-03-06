@@ -378,6 +378,11 @@ public class TensorflowClient implements AutoCloseable{
                 globalConf,
                 hdfs);
         
+        uploadFileAndSetConfContainerResources(new Path(globalConf.get(GlobalConfigurationKeys.MODEL_CONF)),
+                appResourcesPath, 
+                globalConf,
+                hdfs);
+        
         localGlobalFinalConfPath = Constants.getClientResourcesPath(appId.toString(), Constants.GLOBAL_FINAL_XML);
 
         OutputStream os = null;
