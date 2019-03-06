@@ -106,7 +106,14 @@ public class TensorflowSession implements Watcher {
     private boolean chiefWorkerSuccess = true;
 
     private static String zookeeperServerHostPort = null;
+
     private static GuaguaZooKeeper zookeeperServer = null;
+
+    private int totalEpochs;
+
+    private AtomicInteger globalEpoch = new AtomicInteger(0);
+
+    private ConcurrentHashMap<String, TrainingIntermediateResult> intermediateResults = new ConcurrentHashMap<String, TrainingIntermediateResult>();
 
     public enum TaskType {
         TASK_TYPE_CHIEF, TASK_TYPE_PARAMETER_SERVER, TASK_TYPE_WORKER
@@ -117,6 +124,7 @@ public class TensorflowSession implements Watcher {
 
     public TensorflowSession(Configuration globalConf) {
         this.globalConf = globalConf;
+        this.totalEpochs = this.globalConf.getInt(GlobalConfigurationKeys.SHIFU_APPLICATION_EPOCHS, -1);
         this.containerRequests = CommonUtils.parseContainerRequests(this.globalConf);
 
         // create zookeeper server for sync tensorflow cluster spec
@@ -491,9 +499,6 @@ public class TensorflowSession implements Watcher {
         return failedPs;
     }
 
-    private AtomicInteger globalEpoch = new AtomicInteger(0);
-    private ConcurrentHashMap<String, TrainingIntermediateResult> intermediateResults = new ConcurrentHashMap<String, TrainingIntermediateResult>();
-
     private void doStatistic() {
         int count = intermediateResults.size();
         double trainingErrorSum = 0.0d;
@@ -506,7 +511,7 @@ public class TensorflowSession implements Watcher {
             trainingTimeSum += entrySet.getValue().getCurrentEpochTime();
         }
 
-        LOG.info("Epoch:" + globalEpoch.get() + " training error: " + (trainingErrorSum / count) + " valid error: "
+        LOG.info("Epoch:" + getGlobalEpoch().get() + " training error: " + (trainingErrorSum / count) + " valid error: "
                 + (validErrorSum / count) + " Time: " + (trainingTimeSum / count));
     }
 
@@ -552,18 +557,18 @@ public class TensorflowSession implements Watcher {
                     TrainingIntermediateResult intermediateResult = new TrainingIntermediateResult(
                             zookeeperServer.getData(event.getPath(), this, null));
                     int currentEpoch = intermediateResult.getCurrentEpochStep();
-                    if(currentEpoch < globalEpoch.get()) {
+                    if(currentEpoch < getGlobalEpoch().get()) {
                         // ignore stale information
-                    } else if(currentEpoch == globalEpoch.get()) {
+                    } else if(currentEpoch == getGlobalEpoch().get()) {
                         intermediateResults.putIfAbsent(containerId, intermediateResult);
                     } else {
                         // this is the start of next epoch, so we need to calculate current epoch
-                        LOG.info("Epoch " + globalEpoch + " is finish..");
+                        LOG.info("Epoch " + getGlobalEpoch() + " is finish..");
                         doStatistic();
 
                         // do clean
                         intermediateResults.clear();
-                        globalEpoch.incrementAndGet();
+                        getGlobalEpoch().incrementAndGet();
 
                         // add current into new map for next epoch
                         intermediateResults.putIfAbsent(containerId, intermediateResult);
@@ -668,5 +673,33 @@ public class TensorflowSession implements Watcher {
                 CreateMode.PERSISTENT, true, -1);
 
         workers[failedWorkerTaskArrayId] = backupWorkerTask;
+    }
+
+    /**
+     * @return the globalEpoch
+     */
+    public AtomicInteger getGlobalEpoch() {
+        return globalEpoch;
+    }
+
+    /**
+     * @param globalEpoch the globalEpoch to set
+     */
+    public void setGlobalEpoch(AtomicInteger globalEpoch) {
+        this.globalEpoch = globalEpoch;
+    }
+
+    /**
+     * @return the totalEpochs
+     */
+    public int getTotalEpochs() {
+        return totalEpochs;
+    }
+
+    /**
+     * @param totalEpochs the totalEpochs to set
+     */
+    public void setTotalEpochs(int totalEpochs) {
+        this.totalEpochs = totalEpochs;
     }
 }

@@ -74,26 +74,22 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
     private final AbstractLivelinessMonitor<TensorflowTask> hbMonitor;
 
     private Map<String, String> containerEnv;
-    
+
     private ByteBuffer allTokens;
-    
+
     // resource folder on hdfs
     private Path appResourcesPath;
-    
-    public AMRMCallbackHandler(Configuration globalConf, 
-            TensorflowSession session, 
-            NMClientAsync nmClientAsync,
-            AbstractLivelinessMonitor<TensorflowTask> hbMonitor,
-            Map<String, String> containerEnv,
-            String appId) {
+
+    public AMRMCallbackHandler(Configuration globalConf, TensorflowSession session, NMClientAsync nmClientAsync,
+            AbstractLivelinessMonitor<TensorflowTask> hbMonitor, Map<String, String> containerEnv, String appId) {
         this.session = session;
         this.containerResources = new ConcurrentHashMap<String, LocalResource>();
         this.nmClientAsync = nmClientAsync;
         this.hbMonitor = hbMonitor;
         this.containerEnv = containerEnv;
-        
+
         appResourcesPath = Constants.getAppResourcePath(appId);
-        
+
         // All resources available to all containers
         String[] resources = globalConf.getStrings(GlobalConfigurationKeys.getContainerResourcesKey());
         if(null != resources) {
@@ -102,31 +98,25 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
             }
         }
         // Add global conf to resource
-        CommonUtils.addResource(new Path(this.appResourcesPath, Constants.GLOBAL_FINAL_XML), 
-                containerResources, 
-                hdfs,
-                LocalResourceType.FILE,
-                Constants.GLOBAL_FINAL_XML);
-        
+        CommonUtils.addResource(new Path(this.appResourcesPath, Constants.GLOBAL_FINAL_XML), containerResources, hdfs,
+                LocalResourceType.FILE, Constants.GLOBAL_FINAL_XML);
+
         // Add lib jar from hdfs to local resource
-        CommonUtils.addResource(new Path(this.appResourcesPath, Constants.JAR_LIB_ZIP), 
-                containerResources, 
-                hdfs,
-                LocalResourceType.ARCHIVE,
-                Constants.JAR_LIB_ROOT);
-        
-//        // add self jar that container needed from hdfs to resource map
-//        try {
-//            String localAppJarPath = globalConf.get(GlobalConfigurationKeys.SHIFU_YARN_APP_JAR);
-//            CommonUtils.addResource(new Path(this.appResourcesPath, new File(localAppJarPath).getName()),
-//                    containerResources,
-//                    hdfs,
-//                    LocalResourceType.FILE,
-//                    new File(localAppJarPath).getName());
-//        } catch (Exception e) {
-//            LOG.error("Error getting local app jar path.", e);
-//        }
-        
+        CommonUtils.addResource(new Path(this.appResourcesPath, Constants.JAR_LIB_ZIP), containerResources, hdfs,
+                LocalResourceType.ARCHIVE, Constants.JAR_LIB_ROOT);
+
+        // // add self jar that container needed from hdfs to resource map
+        // try {
+        // String localAppJarPath = globalConf.get(GlobalConfigurationKeys.SHIFU_YARN_APP_JAR);
+        // CommonUtils.addResource(new Path(this.appResourcesPath, new File(localAppJarPath).getName()),
+        // containerResources,
+        // hdfs,
+        // LocalResourceType.FILE,
+        // new File(localAppJarPath).getName());
+        // } catch (Exception e) {
+        // LOG.error("Error getting local app jar path.", e);
+        // }
+
         getAllTokens();
     }
 
@@ -164,7 +154,7 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
             }
         }
     }
-    
+
     /*
      * (non-Javadoc)
      * 
@@ -211,7 +201,8 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
 
     /**
      * Populate allTokens with the tokens received
-     * @return 
+     * 
+     * @return
      */
     private void getAllTokens() {
         Credentials credentials;
@@ -234,7 +225,7 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
             throw new RuntimeException(e);
         }
     }
-    
+
     /*
      * (non-Javadoc)
      * 
@@ -261,7 +252,10 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
      * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#getProgress()
      */
     public float getProgress() {
-        return (float) session.getNumCompletedWorkerTasks().get() / (float) session.getNumTotalWorkerTasks();
+        if(session.getGlobalEpoch().get() > session.getTotalEpochs()) {
+            return 1f;
+        }
+        return (float) session.getGlobalEpoch().get() / session.getTotalEpochs();
     }
 
     /*

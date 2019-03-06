@@ -25,6 +25,8 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.ByteBuffer;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,8 +37,6 @@ import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -65,6 +65,8 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.util.Records;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableList;
 
@@ -82,8 +84,8 @@ import net.lingala.zip4j.model.ZipParameters;
  * @author webai
  *
  */
-public class TensorflowClient implements AutoCloseable{
-    private static final Log LOG = LogFactory.getLog(TensorflowClient.class);
+public class TensorflowClient implements AutoCloseable {
+    private static final Logger LOG = LoggerFactory.getLogger(TensorflowClient.class);
 
     private YarnClient yarnClient;
     private int amMemory;
@@ -94,25 +96,40 @@ public class TensorflowClient implements AutoCloseable{
 
     private String hdfsPythonVenv;
     private String hdfsGlibcVenv;
-    
+
     // TODO: currently, we only use specific training script. this will be configurable in future
-    // private String executes;
-    //private String localPythonVenv = "/x/home/webai/tensorflow/python_env.zip";
-    //private String localGlibcVenv = "/x/home/webai/tensorflow/glibc.zip";
-    //private String localJarLibPath = "/x/home/webai/tensorflow/lib.zip";
-    //private String localAppJarPath = null;
 
     private String localGlobalFinalConfPath = null;
-    
+
     // resource folder on hdfs
     private Path appResourcesPath;
-    
+
     private final long clientStartTime = System.currentTimeMillis();
 
     // Configurations
     private Configuration globalConf;
-    private YarnConfiguration yarnConf; 
-    
+    private YarnConfiguration yarnConf;
+
+    private static final String FILE_SEPERATOR = ",";
+
+    private ApplicationId appId;
+
+    private static final DecimalFormat DF = (DecimalFormat) (NumberFormat.getInstance());
+
+    private long startTime;
+
+    private String appName;
+
+    private int reportCounter;
+
+    @SuppressWarnings("unused")
+    private float currentProgress;
+
+    static {
+        DF.setMaximumFractionDigits(2);
+        DF.setGroupingUsed(false);
+    }
+
     public TensorflowClient(Configuration conf) {
         globalConf = conf;
         yarnConf = new YarnConfiguration();
@@ -122,71 +139,71 @@ public class TensorflowClient implements AutoCloseable{
     public TensorflowClient() {
         this(new Configuration(false));
     }
-    
+
     public static CommandLine initOpts(String[] args) throws ParseException {
         Options opts = new Options();
 
         opts.addOption("libjars", true, "");
         opts.addOption("globalconfig", true, "");
-        
+
         return new GnuParser().parse(opts, args);
     }
-    
+
     /**
      * Collect all dependent jars from global conf and args
      */
     private List<String> allLibJars(CommandLine line) throws IOException {
         ArrayList<String> jars = new ArrayList<String>();
-        
+
         String jarsFromConf = globalConf.get(GlobalConfigurationKeys.SHIFU_YARN_LIB_JAR, "");
         jars.addAll(validateFiles(jarsFromConf));
-        
+
         String jarsFromArgs = line.getOptionValue("libjars");
         jars.addAll(validateFiles(jarsFromArgs));
 
         return jars;
     }
-    
+
     /**
      * make these jar avalible to use in current java application
      */
     private void setJarsInCurrentClasspath(List<String> jars) throws IOException {
         List<URL> cp = new ArrayList<URL>();
-        for (String jar : jars) {
+        for(String jar: jars) {
             Path tmp = new Path(jar);
             cp.add(FileSystem.getLocal(globalConf).pathToFile(tmp).toURI().toURL());
         }
-        
-        if (!cp.isEmpty()) {
+
+        if(!cp.isEmpty()) {
             globalConf.setClassLoader(new URLClassLoader(cp.toArray(new URL[0]), globalConf.getClassLoader()));
             Thread.currentThread().setContextClassLoader(
-                    new URLClassLoader(cp.toArray(new URL[0]), Thread.currentThread().getContextClassLoader())); 
+                    new URLClassLoader(cp.toArray(new URL[0]), Thread.currentThread().getContextClassLoader()));
         }
     }
-    
+
     public static void zipFiles(List<String> jars, String dst) throws IOException, ZipException {
         FileSystem fs = HDFSUtils.getLocalFS();
         Path dstPath = new Path(dst);
-        if (fs.exists(dstPath)) {
+        if(fs.exists(dstPath)) {
             fs.delete(dstPath);
         }
-        
-        //fs.mkdirs(new Path(Constants.JAR_LIB_ROOT));
+
+        // fs.mkdirs(new Path(Constants.JAR_LIB_ROOT));
 
         ZipFile zipFile = new ZipFile(dst);
         ZipParameters zipParameters = new ZipParameters();
-        //zipFile.addFolder(new File(Constants.JAR_LIB_ROOT), zipParameters);
-        
-        //zipParameters.setRootFolderInZip(Constants.JAR_LIB_ROOT);
-        for (String jar : jars) {
-            String path = jar.substring(jar.indexOf(':')+1);
+        // zipFile.addFolder(new File(Constants.JAR_LIB_ROOT), zipParameters);
+
+        // zipParameters.setRootFolderInZip(Constants.JAR_LIB_ROOT);
+        for(String jar: jars) {
+            String path = jar.substring(jar.indexOf(':') + 1);
             File jarFile = new File(path);
-            //zipParameters.setDefaultFolderPath(path.substring(0, path.lastIndexOf('/')));
+            // zipParameters.setDefaultFolderPath(path.substring(0, path.lastIndexOf('/')));
             zipFile.addFile(jarFile, zipParameters);
         }
-        //fs.delete(new Path(Constants.JAR_LIB_ROOT));
+        // fs.delete(new Path(Constants.JAR_LIB_ROOT));
     }
-    
+
     /**
      * Parse command line options
      * 
@@ -197,31 +214,31 @@ public class TensorflowClient implements AutoCloseable{
      */
     public boolean init(String[] args) throws Exception {
         globalConf.addResource(Constants.GLOBAL_DEFAULT_XML);
-        
+
         CommandLine line = initOpts(args);
-        
+
         // get global conf path from args
         String globalConfPath;
-        if (line.hasOption("globalconfig")) {
+        if(line.hasOption("globalconfig")) {
             globalConfPath = line.getOptionValue("globalconfig");
         } else {
             LOG.info("We use default global in tensorflow yarn jar instead of user's own.");
             globalConfPath = Constants.GLOBAL_DEFAULT_XML;
         }
         globalConf.addResource(globalConfPath);
-        
-        // collect all dependent jars 
+
+        // collect all dependent jars
         List<String> libjars = allLibJars(line);
-        
+
         // setting jars in client classpath
         setJarsInCurrentClasspath(libjars);
-        
+
         // cp jars into project lib folder and zip to a zip file
         zipFiles(libjars, Constants.JAR_LIB_ZIP);
 
         hdfsPythonVenv = globalConf.get(GlobalConfigurationKeys.PYTHON_ENV_ZIP);
         hdfsGlibcVenv = globalConf.get(GlobalConfigurationKeys.GLIBC_ENV_ZIP);
-        
+
         String amMemoryString = globalConf.get(GlobalConfigurationKeys.AM_MEMORY,
                 GlobalConfigurationKeys.DEFAULT_AM_MEMORY);
         amMemory = Integer.parseInt(CommonUtils.parseMemoryString(amMemoryString));
@@ -276,28 +293,26 @@ public class TensorflowClient implements AutoCloseable{
     public static void main(String[] args) {
         TensorflowClient client = new TensorflowClient(new Configuration());
         boolean sanityCheck;
-
+        long startTime = System.currentTimeMillis();
+        client.setStartTime(startTime);
         try {
             sanityCheck = client.init(args);
 
             if(!sanityCheck) {
-                LOG.fatal("Failed to init client.");
                 throw new RuntimeException("Failed to init client.");
             } else {
-                if (client.start() != 0) {
+                if(client.start() != 0) {
                     throw new RuntimeException("Executing tensorflow client fails");
                 }
             }
         } catch (Exception e) {
-            LOG.fatal("Encountered exception while initializing client or finishing application.", e);
             throw new RuntimeException("Failed to init client.", e);
         } finally {
             LOG.info("Closing Tensorflow client....");
             try {
                 client.close();
             } catch (Exception e) {
-                LOG.fatal("Client Close with error.", e);
-                throw new RuntimeException("Failed to init client.", e);
+                throw new RuntimeException("Failed to close client.", e);
             }
         }
     }
@@ -310,7 +325,7 @@ public class TensorflowClient implements AutoCloseable{
         try {
             result = run();
         } catch (Exception e) {
-            LOG.fatal("Failed to run TensorflowClient", e);
+            LOG.error("Failed to run TensorflowClient", e);
             result = false;
         }
         if(result) {
@@ -354,10 +369,10 @@ public class TensorflowClient implements AutoCloseable{
         // python env, glibc are already in certain folder in hdfs already
         FileSystem hdfs = HDFSUtils.getFS();
         ApplicationSubmissionContext appContext = app.getApplicationSubmissionContext();
-        ApplicationId appId = appContext.getApplicationId();
-        appResourcesPath = Constants.getAppResourcePath(appId.toString());
-        
-        // 
+        this.setAppId(appContext.getApplicationId());
+        appResourcesPath = Constants.getAppResourcePath(getAppId().toString());
+
+        //
         if(hdfsPythonVenv != null) {
             setContainerResources(new Path(hdfsPythonVenv), globalConf);
         }
@@ -367,21 +382,15 @@ public class TensorflowClient implements AutoCloseable{
         }
 
         uploadFileAndSetConfContainerResources(new Path(globalConf.get(GlobalConfigurationKeys.PYTHON_SCRIPT_PATH)),
-                appResourcesPath, 
-                globalConf,
-                hdfs);
-        
+                appResourcesPath, globalConf, hdfs);
+
         uploadFileAndSetConfContainerResources(new Path(globalConf.get(GlobalConfigurationKeys.PYTHON_SHELL_PATH)),
-                appResourcesPath, 
-                globalConf,
-                hdfs);
-        
+                appResourcesPath, globalConf, hdfs);
+
         uploadFileAndSetConfContainerResources(new Path(globalConf.get(GlobalConfigurationKeys.MODEL_CONF)),
-                appResourcesPath, 
-                globalConf,
-                hdfs);
-        
-        localGlobalFinalConfPath = Constants.getClientResourcesPath(appId.toString(), Constants.GLOBAL_FINAL_XML);
+                appResourcesPath, globalConf, hdfs);
+
+        localGlobalFinalConfPath = Constants.getClientResourcesPath(getAppId().toString(), Constants.GLOBAL_FINAL_XML);
 
         OutputStream os = null;
         try {
@@ -397,9 +406,9 @@ public class TensorflowClient implements AutoCloseable{
         }
 
         // setting yarn resouce manager
-        String appName = globalConf.get(GlobalConfigurationKeys.APPLICATION_NAME,
+        this.appName = globalConf.get(GlobalConfigurationKeys.APPLICATION_NAME,
                 GlobalConfigurationKeys.DEFAULT_APPLICATION_NAME);
-        appContext.setApplicationName(appName);
+        appContext.setApplicationName(this.appName);
 
         // Set up resource type requirements
         Resource capability = Resource.newInstance(amMemory, amVCores);
@@ -413,14 +422,14 @@ public class TensorflowClient implements AutoCloseable{
         // Generate launch context includes command line
         // Set the ContainerLaunchContext to describe the Container ith which the TensorflowApplicationMaster is
         // launched.
-        ContainerLaunchContext amSpec = createAMContainerSpec(appId);
+        ContainerLaunchContext amSpec = createAMContainerSpec(getAppId());
         appContext.setAMContainerSpec(amSpec);
-        
+
         LOG.info("Submitting YARN application");
         yarnClient.submitApplication(appContext);
-        ApplicationReport report = yarnClient.getApplicationReport(appId);
+        ApplicationReport report = yarnClient.getApplicationReport(getAppId());
         logTrackingAndRMUrls(report);
-        return monitorApplication(appId);
+        return monitorApplication(getAppId());
     }
 
     public ContainerLaunchContext createAMContainerSpec(ApplicationId appId) throws IOException {
@@ -431,35 +440,27 @@ public class TensorflowClient implements AutoCloseable{
         Map<String, LocalResource> localResources = new HashMap<String, LocalResource>();
 
         // Add global final conf into resources so that AM could read it
-        uploadToHdfsAddIntoResourseMap(hdfs, 
-                localGlobalFinalConfPath, 
-                LocalResourceType.FILE, 
-                new Path(this.appResourcesPath, Constants.GLOBAL_FINAL_XML),
-                Constants.GLOBAL_FINAL_XML,
-                localResources
-                );
+        uploadToHdfsAddIntoResourseMap(hdfs, localGlobalFinalConfPath, LocalResourceType.FILE,
+                new Path(this.appResourcesPath, Constants.GLOBAL_FINAL_XML), Constants.GLOBAL_FINAL_XML,
+                localResources);
 
         // add lib jar that AM needed from hdfs to resource map
-        uploadToHdfsAddIntoResourseMap(hdfs, 
-                Constants.JAR_LIB_ZIP, 
-                LocalResourceType.ARCHIVE, 
-                new Path(this.appResourcesPath, Constants.JAR_LIB_ZIP),
-                Constants.JAR_LIB_ROOT, // archive file will be unzip under "lib" folder
-                localResources
-                );
-        
-        HDFSUtils.getLocalFS().delete(new Path(Constants.JAR_LIB_ZIP));
-        
-//          uploadToHdfsAddIntoResourseMap(hdfs, 
-//              "/hadoop/home/webai/tensorflow-shifu/shifu-0.12.1-SNAPSHOT/lib/shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar", 
-//              LocalResourceType.FILE, 
-//              new Path(this.appResourcesPath, "shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar"),
-//              "shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar", // archive file will be unzip under "lib" folder
-//              localResources
-//          );
-        
+        uploadToHdfsAddIntoResourseMap(hdfs, Constants.JAR_LIB_ZIP, LocalResourceType.ARCHIVE,
+                new Path(this.appResourcesPath, Constants.JAR_LIB_ZIP), Constants.JAR_LIB_ROOT, // archive file will be
+                                                                                                // unzip under "lib"
+                                                                                                // folder
+                localResources);
 
-        
+        HDFSUtils.getLocalFS().delete(new Path(Constants.JAR_LIB_ZIP));
+
+        // uploadToHdfsAddIntoResourseMap(hdfs,
+        // "/hadoop/home/webai/tensorflow-shifu/shifu-0.12.1-SNAPSHOT/lib/shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar",
+        // LocalResourceType.FILE,
+        // new Path(this.appResourcesPath, "shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar"),
+        // "shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar", // archive file will be unzip under "lib" folder
+        // localResources
+        // );
+
         // Set logs to be readable by everyone. Set app to be modifiable only by app owner.
         Map<ApplicationAccessType, String> acls = new HashMap<ApplicationAccessType, String>(2);
         acls.put(ApplicationAccessType.VIEW_APP, "*");
@@ -468,7 +469,7 @@ public class TensorflowClient implements AutoCloseable{
 
         // generate env map for running AM. it could also be part of env for running taskexecutor
         Map<String, String> AMExecutingEnv = generateAMEnvironment(hdfs, localResources);
-        
+
         String command = buildCommand(amMemory, AMExecutingEnv);
 
         LOG.info("Completed setting up Application Master command " + command);
@@ -476,7 +477,7 @@ public class TensorflowClient implements AutoCloseable{
         amContainer.setEnvironment(AMExecutingEnv);
         amContainer.setLocalResources(localResources);
         setToken(amContainer);
-        
+
         return amContainer;
     }
 
@@ -494,7 +495,7 @@ public class TensorflowClient implements AutoCloseable{
             if(tokenRenewer == null || tokenRenewer.length() == 0) {
                 throw new IOException("Can't get Master Kerberos principal for the RM to use as renewer");
             }
-            
+
             // For now, only getting tokens for the default file-system.
             final Token<?>[] tokens = HDFSUtils.getFS().addDelegationTokens(tokenRenewer, credentials);
             if(tokens != null) {
@@ -508,25 +509,25 @@ public class TensorflowClient implements AutoCloseable{
             amContainer.setTokens(fsTokens);
         }
     }
-    
+
     static String buildCommand(long amMemory, Map<String, String> containerEnv) {
         List<String> arguments = new ArrayList<String>(30);
         arguments.add("exec");
-        
+
         arguments.add(HdfsUtils.$$(ApplicationConstants.Environment.JAVA_HOME.toString()) + "/bin/java");
         // Set Xmx based on am memory size
         arguments.add("-Xmx" + (int) (amMemory * 0.8f) + "m");
-        
+
         arguments.add("-cp .:${CLASSPATH}");
-        
+
         // Add configuration for log dir to retrieve log output from python subprocess in AM
         arguments.add(
                 "-D" + YarnConfiguration.YARN_APP_CONTAINER_LOG_DIR + "=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR);
 
         // Set class name
         arguments.add(" " + TensorflowApplicationMaster.class.getName() + " ");
-        //arguments.add(" " + HelloWorld.class.getName() + " ");
-        
+        // arguments.add(" " + HelloWorld.class.getName() + " ");
+
         for(Map.Entry<String, String> entry: containerEnv.entrySet()) {
             arguments.add("--container_env " + entry.getKey() + "=" + entry.getValue());
         }
@@ -538,8 +539,8 @@ public class TensorflowClient implements AutoCloseable{
         return String.join(" ", arguments);
     }
 
-    private  Map<String, String> generateAMEnvironment(FileSystem fs, 
-            Map<String, LocalResource> localResources) throws IOException {
+    private Map<String, String> generateAMEnvironment(FileSystem fs, Map<String, LocalResource> localResources)
+            throws IOException {
         // Add AppMaster.jar location to classpath
         // At some point we should not be required to add
         // the hadoop specific classpaths to the env.
@@ -547,17 +548,17 @@ public class TensorflowClient implements AutoCloseable{
         // For now setting all required classpaths including
         // the classpath to "." for the application jar
         Map<String, String> amEnv = new HashMap<String, String>();
-        
+
         StringBuilder classPathEnv = new StringBuilder(
                 HdfsUtils.$$(ApplicationConstants.Environment.CLASSPATH.toString()))
-                        .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./*")
-                        .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./" + Constants.JAR_LIB_ROOT + "/*");
-//                        .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar");
-//                        .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/zip4j-1.3.2.jar")
-//                        .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/guagua-mapreduce-0.7.8-hadoop2.jar")
-//                        .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/guagua-core-0.7.8.jar")
-//                        .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/shifu-0.12.1-SNAPSHOT.jar");
-        
+                        .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./*").append(HdfsUtils.CLASS_PATH_SEPARATOR)
+                        .append("./" + Constants.JAR_LIB_ROOT + "/*");
+        // .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar");
+        // .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/zip4j-1.3.2.jar")
+        // .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/guagua-mapreduce-0.7.8-hadoop2.jar")
+        // .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/guagua-core-0.7.8.jar")
+        // .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/shifu-0.12.1-SNAPSHOT.jar");
+
         for(String c: yarnConf.getStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH,
                 HdfsUtils.DEFAULT_YARN_CROSS_PLATFORM_APPLICATION_CLASSPATH)) {
             classPathEnv.append(HdfsUtils.CLASS_PATH_SEPARATOR);
@@ -582,28 +583,26 @@ public class TensorflowClient implements AutoCloseable{
      * @throws IOException
      *             error when writing to HDFS
      */
-    private void uploadToHdfsAddIntoResourseMap(FileSystem hdfs, 
-            String srcPath, 
-            LocalResourceType resourceType, 
-            Path dst,
-            String resourceKey,
-            Map<String, LocalResource> localResources) throws IOException {
-        
-        
+    private void uploadToHdfsAddIntoResourseMap(FileSystem hdfs, String srcPath, LocalResourceType resourceType,
+            Path dst, String resourceKey, Map<String, LocalResource> localResources) throws IOException {
+
         hdfs.copyFromLocalFile(new Path(srcPath), dst);
         hdfs.setPermission(dst, new FsPermission((short) 0770));
         FileStatus scFileStatus = hdfs.getFileStatus(dst);
 
-        LocalResource scRsrc = LocalResource.newInstance(ConverterUtils.getYarnUrlFromURI(hdfs.makeQualified(dst).toUri()), resourceType,
+        LocalResource scRsrc = LocalResource.newInstance(
+                ConverterUtils.getYarnUrlFromURI(hdfs.makeQualified(dst).toUri()), resourceType,
                 LocalResourceVisibility.APPLICATION, scFileStatus.getLen(), scFileStatus.getModificationTime());
-        
+
         localResources.put(resourceKey, scRsrc);
     }
 
     /**
      * 
-     * @param src file
-     * @param hdfsdst folder
+     * @param src
+     *            file
+     * @param hdfsdst
+     *            folder
      * @param gobalConf
      * @param hdfs
      * @throws IOException
@@ -611,13 +610,13 @@ public class TensorflowClient implements AutoCloseable{
     private void uploadFileAndSetConfContainerResources(Path src, Path hdfsdst, Configuration gobalConf,
             FileSystem hdfs) throws IOException {
         Path dst = new Path(hdfsdst, src.getName());
-        if (!hdfs.exists(dst)) {
+        if(!hdfs.exists(dst)) {
             hdfs.copyFromLocalFile(src, dst);
             hdfs.setPermission(dst, new FsPermission((short) 0770));
         }
         appendConfResources(GlobalConfigurationKeys.getContainerResourcesKey(), dst.toString(), gobalConf);
     }
-    
+
     private void setContainerResources(Path hdfsPath, Configuration gobalConf) {
         appendConfResources(GlobalConfigurationKeys.getContainerResourcesKey(), hdfsPath.toString(), gobalConf);
     }
@@ -640,8 +639,8 @@ public class TensorflowClient implements AutoCloseable{
     private boolean monitorApplication(ApplicationId appId) throws YarnException, IOException, InterruptedException {
 
         while(true) {
-            // Check app status every 1 second.
-            Thread.sleep(1000);
+            // Check app status every 10 second.
+            Thread.sleep(10000);
 
             // Get application report for the appId we are interested in
             ApplicationReport report = yarnClient.getApplicationReport(appId);
@@ -654,8 +653,11 @@ public class TensorflowClient implements AutoCloseable{
                         + ", DSFinalStatus=" + dsStatus.toString() + ", breaking monitoring loop.");
                 String histHost = globalConf.get(GlobalConfigurationKeys.SHIFU_HISTORY_HOST,
                         GlobalConfigurationKeys.DEFAULT_SHIFU_HISTORY_HOST);
-                CommonUtils.printTHSUrl(histHost, appId.toString(), LOG);
+                LOG.info(String.format("Link for %s's events/metrics: http://%s/%s/%s", appId, histHost,
+                        Constants.JOBS_SUFFIX, appId));
                 return FinalApplicationStatus.SUCCEEDED == dsStatus;
+            } else {
+                checkProgress(report);
             }
 
             if(appTimeout > 0) {
@@ -669,13 +671,94 @@ public class TensorflowClient implements AutoCloseable{
         }
     }
 
+    /**
+     * Assess whether job is already finished/failed and 'done' flag needs to be
+     * set, prints progress display for client if all is going well.
+     * 
+     * @param report
+     *            the application report to assess.
+     * @return true if job report indicates the job run is over.
+     */
+    private boolean checkProgress(final ApplicationReport report) {
+        YarnApplicationState jobState = report.getYarnApplicationState();
+
+        if(this.reportCounter++ % 10 == 0) {
+            LOG.info(
+                    "Got applicaton report for appId={}, state={}, progress={}%, amDiag={}, masterHost={}, masterRpcPort={}, queue={}, startTime={}, clientToken={}, finalState={}, trackingUrl={}, user={}",
+                    this.getAppId().getId(), report.getYarnApplicationState().toString(),
+                    DF.format(report.getProgress() * 100), report.getDiagnostics(), report.getHost(),
+                    report.getRpcPort(), report.getQueue(), report.getStartTime(), report.getClientToAMToken(),
+                    report.getFinalApplicationStatus().toString(), report.getTrackingUrl(), report.getUser());
+        }
+        switch(jobState) {
+            case FINISHED:
+                LOG.info("Application finished in {} ms", (System.currentTimeMillis() - getStartTime()));
+                return true;
+            case KILLED:
+                LOG.error("{} reports KILLED state, diagnostics show: {}", getAppName(), report.getDiagnostics());
+                return true;
+            case FAILED:
+                LOG.error("{} reports FAILED state, diagnostics show: {}", getAppName(), report.getDiagnostics());
+                return true;
+            default:
+                if(this.reportCounter % 10 == 0) {
+                    displayJobReport(report);
+                }
+                return false;
+        }
+    }
+
+    public String getAppName() {
+        return appName;
+    }
+
+    public long getStartTime() {
+        return startTime;
+    }
+
+    /**
+     * Display a formatted summary of the job progress report from the AM.
+     * 
+     * @param report
+     *            the report to display.
+     */
+    private void displayJobReport(final ApplicationReport report) {
+        if(null == report) {
+            throw new IllegalStateException(String.format(
+                    "[*] Latest ApplicationReport for job %s was not received by the local client.", getAppName()));
+        }
+        final float elapsed = (System.currentTimeMillis() - report.getStartTime()) / 1000.0f;
+        LOG.info("{}, Elapsed: {}", getAppName(), String.format("%.2f secs", elapsed));
+        LOG.info("{}, State: {} , Containers: used/reserved/needed-resources {}/{}/{}",
+                report.getCurrentApplicationAttemptId(), report.getYarnApplicationState().name(),
+                report.getApplicationResourceUsageReport().getNumUsedContainers(),
+                report.getApplicationResourceUsageReport().getNumReservedContainers(),
+                report.getApplicationResourceUsageReport().getNeededResources());
+    }
+
+    @SuppressWarnings("unused")
+    private int printFinalJobReport() throws YarnException, IOException {
+        try {
+            ApplicationReport report = this.yarnClient.getApplicationReport(getAppId());
+            FinalApplicationStatus finalAppStatus = report.getFinalApplicationStatus();
+            final long secs = (report.getFinishTime() - report.getStartTime()) / 1000L;
+            final String time = String.format("%d minutes, %d seconds.", secs / 60L, secs % 60L);
+            LOG.info("Completed {}: {}, total running time: {}", getAppName(), finalAppStatus.name(), time);
+            return finalAppStatus == FinalApplicationStatus.SUCCEEDED ? 0 : -1;
+        } catch (YarnException yre) {
+            LOG.error(String.format("Exception encountered while attempting to request a final job report for %s.",
+                    getAppId()), yre);
+            return -1;
+        }
+    }
+
     private void logTrackingAndRMUrls(ApplicationReport report) {
         LOG.info("URL to track running application (will proxy to TensorBoard once it has started): "
                 + report.getTrackingUrl());
-        
-          LOG.info("ResourceManager web address for application: "
-          + CommonUtils.buildRMUrl(yarnConf, report.getApplicationId().toString()));
-         
+
+        LOG.info("ResourceManager web address for application: "
+                + CommonUtils.buildRMUrl(yarnConf, report.getApplicationId().toString()));
+
     }
 
     /**
@@ -690,8 +773,7 @@ public class TensorflowClient implements AutoCloseable{
         yarnClient.killApplication(appId);
 
     }
-    
-    private static final String FILE_SEPERATOR = ",";
+
     /**
      * Take input as a comma separated list of files and verifies if they exist. It defaults for file:/// if the files
      * specified do not have a scheme. it returns the paths uri converted defaulting to file:///. So an input of
@@ -699,12 +781,12 @@ public class TensorflowClient implements AutoCloseable{
      */
     private List<String> validateFiles(String files) throws IOException {
         ArrayList<String> finalArr = new ArrayList<String>();
-        
+
         if(StringUtils.isBlank(files))
             return finalArr;
-        
+
         String[] fileArr = files.split(FILE_SEPERATOR);
-        
+
         for(int i = 0; i < fileArr.length; i++) {
             String tmp = fileArr[i];
             URI pathURI;
@@ -725,5 +807,36 @@ public class TensorflowClient implements AutoCloseable{
             }
         }
         return finalArr;
+    }
+
+    /**
+     * @return the appId
+     */
+    public ApplicationId getAppId() {
+        return appId;
+    }
+
+    /**
+     * @param appId
+     *            the appId to set
+     */
+    public void setAppId(ApplicationId appId) {
+        this.appId = appId;
+    }
+
+    /**
+     * @param startTime
+     *            the startTime to set
+     */
+    public void setStartTime(long startTime) {
+        this.startTime = startTime;
+    }
+
+    /**
+     * @param appName
+     *            the appName to set
+     */
+    public void setAppName(String appName) {
+        this.appName = appName;
     }
 }
