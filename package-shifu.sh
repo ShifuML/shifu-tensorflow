@@ -18,6 +18,13 @@ fi
 
 cd ..
 
+# remove existing shifu tgz file for generation
+SHIFU_PACKAGE_PATH=`ls -al shifu*-hdp-yarn.tar.gz | awk '{print $NF}'`
+if [ "${SHIFU_PACKAGE_PATH}" != "" ]; then 
+    rm -fr $SHIFU_PACKAGE_PATH
+fi
+
+
 SHIFU_PACKAGE_PATH=`find . -iname shifu*-hdp-yarn.tar.gz`
 mv "${SHIFU_PACKAGE_PATH}" .
 

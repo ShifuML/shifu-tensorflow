@@ -57,11 +57,10 @@ import ml.shifu.shifu.core.TrainingIntermediateResult;
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
 import ml.shifu.shifu.core.yarn.util.Constants;
 import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
-import ml.shifu.shifu.core.yarn.util.HdfsUtils;
-import ml.shifu.shifu.util.HDFSUtils;
 
 /**
  * Tensorflow Session contains all tensorflow jobs information
+ * 
  * @author webai
  * 
  */
@@ -74,8 +73,7 @@ public class TensorflowSession implements Watcher {
     private Map<String, TensorflowTask> containerIdToTask = new HashMap<String, TensorflowTask>();
     // A map from task name to an array of TFTasks with that name.
     private Map<String, TensorflowTask[]> jobNameToTasks = new ConcurrentHashMap<String, TensorflowTask[]>();
-    private Map<String, ConcurrentLinkedQueue<TensorflowTask>> jobNameToBackupTask = 
-            new ConcurrentHashMap<String, ConcurrentLinkedQueue<TensorflowTask>>();
+    private Map<String, ConcurrentLinkedQueue<TensorflowTask>> jobNameToBackupTask = new ConcurrentHashMap<String, ConcurrentLinkedQueue<TensorflowTask>>();
 
     private TensorflowClusterSpec tensorflowClusterSpec;
 
@@ -91,11 +89,11 @@ public class TensorflowSession implements Watcher {
     private boolean isChiefWorkerComplete = false;
     private AtomicInteger numCompletedWorkerTasks = new AtomicInteger(0);
     private Map<String, Integer> jobNameToTaskNum = new ConcurrentHashMap<String, Integer>();
-    
+
     /** failed task index in task array including timeout task and return wrong exit code **/
     private ConcurrentLinkedQueue<Integer> failedWorkers = new ConcurrentLinkedQueue<Integer>();
-    /** failed only when return wrong exit code, store task index of ps**/
-    private ConcurrentLinkedQueue<String> failedPs = new ConcurrentLinkedQueue<String>();    
+    /** failed only when return wrong exit code, store task index of ps **/
+    private ConcurrentLinkedQueue<String> failedPs = new ConcurrentLinkedQueue<String>();
 
     // sessionId to distinguish different sessions. Currently used to distinguish
     // failed session and new session.
@@ -108,19 +106,30 @@ public class TensorflowSession implements Watcher {
     private boolean chiefWorkerSuccess = true;
 
     private static String zookeeperServerHostPort = null;
+
     private static GuaguaZooKeeper zookeeperServer = null;
+
+    private int totalEpochs;
+
+    private AtomicInteger globalEpoch = new AtomicInteger(0);
+
+    private ConcurrentHashMap<String, TrainingIntermediateResult> intermediateResults = new ConcurrentHashMap<String, TrainingIntermediateResult>();
 
     public enum TaskType {
         TASK_TYPE_CHIEF, TASK_TYPE_PARAMETER_SERVER, TASK_TYPE_WORKER
     }
-    public TensorflowSession() {}
+
+    public TensorflowSession() {
+    }
+
     public TensorflowSession(Configuration globalConf) {
         this.globalConf = globalConf;
+        this.totalEpochs = this.globalConf.getInt(GlobalConfigurationKeys.SHIFU_APPLICATION_EPOCHS, -1);
         this.containerRequests = CommonUtils.parseContainerRequests(this.globalConf);
 
         // create zookeeper server for sync tensorflow cluster spec
         // This has been settled in prepare of AM
-        if (zookeeperServer == null) {
+        if(zookeeperServer == null) {
             zookeeperServerHostPort = startZookeeperServer();
             try {
                 zookeeperServer = new GuaguaZooKeeper(zookeeperServerHostPort, 3000000, 5, 1000, this);
@@ -131,27 +140,28 @@ public class TensorflowSession implements Watcher {
         }
 
         Map<String, Integer> jobNameToBackupTaskNum = new HashMap<String, Integer>();
-        for( Entry<String, TensorFlowContainerRequest> jobNameToContainerReq: containerRequests.entrySet()) {
+        for(Entry<String, TensorFlowContainerRequest> jobNameToContainerReq: containerRequests.entrySet()) {
             String jobName = jobNameToContainerReq.getKey();
             TensorFlowContainerRequest req = jobNameToContainerReq.getValue();
-            
+
             int taskCnt = req.getNumInstances();
             int backupTaskCnt = req.getNumBackupInstances();
-            
+
             jobNameToTasks.put(jobName, new TensorflowTask[taskCnt]);
-            jobNameToBackupTask.put(jobName,  new ConcurrentLinkedQueue<TensorflowTask>());
-            
+            jobNameToBackupTask.put(jobName, new ConcurrentLinkedQueue<TensorflowTask>());
+
             jobNameToTaskNum.put(jobName, taskCnt);
             jobNameToBackupTaskNum.put(jobName, backupTaskCnt);
         }
 
         this.tensorflowClusterSpec = new TensorflowClusterSpec(
-                jobNameToTaskNum.get(Constants.PS_JOB_NAME) + jobNameToBackupTaskNum.get(Constants.PS_JOB_NAME), 
-                jobNameToTaskNum.get(Constants.WORKER_JOB_NAME) + jobNameToBackupTaskNum.get(Constants.WORKER_JOB_NAME));
-        
+                jobNameToTaskNum.get(Constants.PS_JOB_NAME) + jobNameToBackupTaskNum.get(Constants.PS_JOB_NAME),
+                jobNameToTaskNum.get(Constants.WORKER_JOB_NAME)
+                        + jobNameToBackupTaskNum.get(Constants.WORKER_JOB_NAME));
+
         // Split training data for workers
         try {
-            splitedTrainingData = TrainingDataSet.getInstance().getSplitedFilePaths(globalConf, 
+            splitedTrainingData = TrainingDataSet.getInstance().getSplitedFilePaths(globalConf,
                     jobNameToTaskNum.get(Constants.WORKER_JOB_NAME),
                     globalConf.get(GlobalConfigurationKeys.TRAINING_DATA_PATH));
             LOG.info("splitedTrainingData: " + splitedTrainingData.toString());
@@ -163,7 +173,7 @@ public class TensorflowSession implements Watcher {
 
     private static String startZookeeperServer() {
         String localHostName = CommonUtils.getCurrentHostName();
-        
+
         int embedZkClientPort = 0;
         try {
             embedZkClientPort = ZooKeeperUtils.startEmbedZooKeeper();
@@ -174,12 +184,12 @@ public class TensorflowSession implements Watcher {
         ZooKeeperUtils.checkIfEmbedZooKeeperStarted(embedZkClientPort);
         return localHostName + ":" + embedZkClientPort;
     }
-    
+
     public void scheduleTasks(AMRMClientAsync<ContainerRequest> amRMClient) {
         for(Entry<String, TensorFlowContainerRequest> jobNameToContainerReq: containerRequests.entrySet()) {
             String jobName = jobNameToContainerReq.getKey();
             TensorFlowContainerRequest containerRequest = jobNameToContainerReq.getValue();
-            
+
             if(!jobNameToContainerRequests.containsKey(jobName)) {
                 jobNameToContainerRequests.put(jobName, new ArrayList<ContainerRequest>());
             }
@@ -215,8 +225,8 @@ public class TensorflowSession implements Watcher {
      */
     public synchronized TensorflowTask distributeTaskToContainer(Container container) {
         String jobName = getAvailableJobName(container);
-        
-        if (StringUtils.isBlank(jobName)) {
+
+        if(StringUtils.isBlank(jobName)) {
             LOG.error("Cannot distribute container: " + container.toString());
             throw new RuntimeException("couldn't find job to match container");
         } else {
@@ -230,26 +240,26 @@ public class TensorflowSession implements Watcher {
                 LOG.error("watch container fails", e);
                 throw new RuntimeException(e);
             }
-            
-            if (jobNameToPendingTaskNumber.get(jobName) > 0) {
+
+            if(jobNameToPendingTaskNumber.get(jobName) > 0) {
                 // distribute container to task
                 TensorflowTask[] tasks = jobNameToTasks.get(jobName);
                 for(int i = 0; i < tasks.length; i++) {
                     if(tasks[i] == null) {
-                        tasks[i] = new TensorflowTask(jobName, String.valueOf(i), sessionId, 
-                                container, zookeeperServerHostPort, globalConf, false, i);
+                        tasks[i] = new TensorflowTask(jobName, String.valueOf(i), sessionId, container,
+                                zookeeperServerHostPort, globalConf, false, i);
 
-                        if (Constants.WORKER_JOB_NAME.equalsIgnoreCase(jobName)) {
+                        if(Constants.WORKER_JOB_NAME.equalsIgnoreCase(jobName)) {
                             // Only worker has training data
                             tasks[i].setTrainingDataPaths(splitedTrainingData.get(i).toString());
                         }
-                        
+
                         jobNameToPendingTaskNumber.put(jobName, jobNameToPendingTaskNumber.get(jobName) - 1);
                         containerIdToTask.put(containerId, tasks[i]);
                         return tasks[i];
                     }
                 }
-            } else if (jobNameToPendingBackupTaskNumber.get(jobName) > 0) {
+            } else if(jobNameToPendingBackupTaskNumber.get(jobName) > 0) {
                 // distribute container to backup task
                 int taskId = jobNameToTaskNum.get(jobName) + jobNameToBackupTask.get(jobName).size();
                 TensorflowTask task = new TensorflowTask(jobName, String.valueOf(taskId), sessionId, container,
@@ -261,7 +271,7 @@ public class TensorflowSession implements Watcher {
                 return task;
             }
         }
-           
+
         throw new RuntimeException("Error when distribute container to task");
     }
 
@@ -274,16 +284,16 @@ public class TensorflowSession implements Watcher {
      */
     private synchronized String getAvailableJobName(Container container) {
         LOG.info("allocated resource: " + container.getResource().toString());
-        LOG.info("remaining resource: " +jobNameToPendingTaskNumber);
+        LOG.info("remaining resource: " + jobNameToPendingTaskNumber);
         LOG.info("session id: " + sessionId);
         for(Map.Entry<String, TensorFlowContainerRequest> jobNameToRequest: containerRequests.entrySet()) {
             String jobName = jobNameToRequest.getKey();
             TensorFlowContainerRequest request = jobNameToRequest.getValue();
             int pendingNumber = jobNameToPendingTaskNumber.get(jobName);
             int pendingBackupNumber = jobNameToPendingBackupTaskNumber.get(jobName);
-            
+
             if((int) request.getMemory() == container.getResource().getMemory()
-                    && request.getVCores() == container.getResource().getVirtualCores() 
+                    && request.getVCores() == container.getResource().getVirtualCores()
                     && (pendingNumber > 0 || pendingBackupNumber > 0)) {
                 return jobName;
             }
@@ -308,7 +318,7 @@ public class TensorflowSession implements Watcher {
 
         return null;
     }
-    
+
     public TensorflowTask getTaskFromBackupTasks(String jobName, String taskIndex) {
         Iterator<TensorflowTask> backupItr = jobNameToBackupTask.get(jobName).iterator();
         while(backupItr.hasNext()) {
@@ -333,41 +343,43 @@ public class TensorflowSession implements Watcher {
 
     private int getFailedTasksNum(TensorflowTask[] tasks) {
         int failedTaskNum = 0;
-        for (TensorflowTask task: tasks) {
+        for(TensorflowTask task: tasks) {
             if(task == null) {
                 String msg = "Job is null, this should not happen.";
                 LOG.error(msg);
                 setFinalStatus(FinalApplicationStatus.FAILED, msg);
                 return 0;
             }
-            if (task.exitStatus != 0) {
+            if(task.exitStatus != 0) {
                 failedTaskNum += 1;
                 String msg = "Job " + task.getJobName() + " at index: " + task.getTaskIndex()
-                    + " haven't finished yet.";
+                        + " haven't finished yet.";
                 LOG.error(msg);
             }
         }
         return failedTaskNum;
     }
-    
+
     /**
      * To get max number of ps could failed and training process does not have impact
+     * 
      * @return
      */
     public double failedPsMaxLimit() {
-        return Constants.PS_FAULT_TOLERNANCE_THREAHOLD * getNumTotalPsTasks() + 
-                getJobNameToBackupTask().get(Constants.PS_JOB_NAME).size();
+        return Constants.PS_FAULT_TOLERNANCE_THREAHOLD * getNumTotalPsTasks()
+                + getJobNameToBackupTask().get(Constants.PS_JOB_NAME).size();
     }
-    
+
     /**
      * To get max number of worker could failed and training process does not have impact
+     * 
      * @return
      */
     public double failedWorkerMaxLimit() {
-        return Constants.WORKER_FAULT_TOLERENANCE_THRESHOLD * getNumTotalWorkerTasks() + 
-                getJobNameToBackupTask().get(Constants.WORKER_JOB_NAME).size();
+        return Constants.WORKER_FAULT_TOLERENANCE_THRESHOLD * getNumTotalWorkerTasks()
+                + getJobNameToBackupTask().get(Constants.WORKER_JOB_NAME).size();
     }
-    
+
     /**
      * Update the status of a session and set exit code if a session is completed.
      */
@@ -376,80 +388,77 @@ public class TensorflowSession implements Watcher {
             return;
         }
 
-        if (chiefWorkerSuccess) {
+        if(chiefWorkerSuccess) {
             LOG.info("Session completed with chief worker success, setting final status SUCCEEDED.");
             setFinalStatus(FinalApplicationStatus.SUCCEEDED, null);
         } else {
             setFinalStatus(FinalApplicationStatus.FAILED, "Chief worker failed");
         }
-        
-        /**
-        int failedWorkerNum = getFailedTasksNum(jobNameToTasks.get(Constants.WORKER_JOB_NAME));
-        int failedPsNum = getFailedTasksNum(jobNameToTasks.get(Constants.PS_JOB_NAME));
 
-        if(failedPsNum > 0) {
-            setFinalStatus(FinalApplicationStatus.FAILED, "There are some PS fails, they are: " + failedPs.toString());
-        } else if(failedWorkerNum >= failedWorkerMaxLimit()) {
-            setFinalStatus(FinalApplicationStatus.FAILED,
-                    "More than threshold of worker failed, failedCnt=" + failedWorkerNum);
-        } else if(!chiefWorkerSuccess) {
-            setFinalStatus(FinalApplicationStatus.FAILED, "Chief worker failed");
-        } else {
-            LOG.info("Session completed with no job failures, setting final status SUCCEEDED.");
-            setFinalStatus(FinalApplicationStatus.SUCCEEDED, null);
-        }
-        **/
+        /**
+         * int failedWorkerNum = getFailedTasksNum(jobNameToTasks.get(Constants.WORKER_JOB_NAME));
+         * int failedPsNum = getFailedTasksNum(jobNameToTasks.get(Constants.PS_JOB_NAME));
+         * 
+         * if(failedPsNum > 0) {
+         * setFinalStatus(FinalApplicationStatus.FAILED, "There are some PS fails, they are: " + failedPs.toString());
+         * } else if(failedWorkerNum >= failedWorkerMaxLimit()) {
+         * setFinalStatus(FinalApplicationStatus.FAILED,
+         * "More than threshold of worker failed, failedCnt=" + failedWorkerNum);
+         * } else if(!chiefWorkerSuccess) {
+         * setFinalStatus(FinalApplicationStatus.FAILED, "Chief worker failed");
+         * } else {
+         * LOG.info("Session completed with no job failures, setting final status SUCCEEDED.");
+         * setFinalStatus(FinalApplicationStatus.SUCCEEDED, null);
+         * }
+         **/
     }
 
-    
-    
     /**
      * Refresh task status on each TaskExecutor registers its exit code with AM.
      */
     public void onTaskCompleted(String jobName, String jobIndex, int exitCode) {
         LOG.info(String.format("Job %s:%s exited with %d", jobName, jobIndex, exitCode));
         TensorflowTask backupTask = getTaskFromBackupTasks(jobName, jobIndex);
-        if (backupTask != null) {
+        if(backupTask != null) {
             // if backup task fails, we just remove it from standing-by queue
             // do not need to worry
             jobNameToBackupTask.get(jobName).remove(backupTask);
             LOG.error("backup task fails!!");
             return;
         }
-        
+
         TensorflowTask task = getTaskFromNormalTasks(jobName, jobIndex);
         Preconditions.checkNotNull(task);
-        
+
         // mark current task as completed
         task.setExitStatus(exitCode);
-        
-        if (Constants.WORKER_JOB_NAME.equals(jobName)) {
+
+        if(Constants.WORKER_JOB_NAME.equals(jobName)) {
             LOG.info(jobName + ":" + jobIndex + ":" + exitCode);
-            
-            if (exitCode == 0) {
+
+            if(exitCode == 0) {
                 // success
                 numCompletedWorkerTasks.incrementAndGet();
-                if (isChief(jobName, jobIndex)) {
+                if(isChief(jobName, jobIndex)) {
                     isChiefWorkerComplete = true;
                 }
             } else {
-                if (isChief(jobName, jobIndex)) {
-                    // If the chief worker failed[chief or worker 0], short circuit and stop the training. Note that even
-                    // though other worker failures will also fail the job but we don't short circuit the training because
-                    // the training
-                    // can still continue, while if chief worker is dead, a TensorFlow training would hang.
-                    // Also note that, we only short circuit when the chief worker failed, not finished.
+                if(isChief(jobName, jobIndex)) {
+                    // If the chief worker failed[chief or worker 0], short circuit and stop the training. Note that
+                    // even though other worker failures will also fail the job but we don't short circuit the training
+                    // because the training can still continue, while if chief worker is dead, a TensorFlow training
+                    // would hang. Also note that, we only short circuit when the chief worker failed, not finished.
                     chiefWorkerSuccess = false;
-                } 
+                }
                 failedWorkers.offer(task.getArrayIndex());
             }
         } else {
-            if (exitCode != 0) {
+            if(exitCode != 0) {
                 // ps fails
                 failedPs.offer(task.getTaskIndex());
             }
         }
-        
+
     }
 
     public void stopAllTasks(NMClientAsync nmClientAsync) {
@@ -465,7 +474,7 @@ public class TensorflowSession implements Watcher {
     public boolean isChiefWorkerComplete() {
         return isChiefWorkerComplete;
     }
-    
+
     public AtomicInteger getNumCompletedWorkerTasks() {
         return numCompletedWorkerTasks;
     }
@@ -477,46 +486,41 @@ public class TensorflowSession implements Watcher {
     public int getNumTotalWorkerTasks() {
         return jobNameToTaskNum.get(Constants.WORKER_JOB_NAME);
     }
-    
+
     public int getNumTotalPsTasks() {
         return jobNameToTaskNum.get(Constants.PS_JOB_NAME);
     }
-    
+
     public ConcurrentLinkedQueue<Integer> getFailedWorkers() {
         return failedWorkers;
     }
+
     public ConcurrentLinkedQueue<String> getFailedPs() {
         return failedPs;
     }
 
-    private AtomicInteger globalEpoch = new AtomicInteger(0);
-    private ConcurrentHashMap<String, TrainingIntermediateResult> intermediateResults = 
-            new ConcurrentHashMap<String, TrainingIntermediateResult>();
-    
     private void doStatistic() {
         int count = intermediateResults.size();
         double trainingErrorSum = 0.0d;
         double validErrorSum = 0.0d;
         double trainingTimeSum = 0.0d;
-        
-        for (Entry<String, TrainingIntermediateResult> entrySet : intermediateResults.entrySet()) {
+
+        for(Entry<String, TrainingIntermediateResult> entrySet: intermediateResults.entrySet()) {
             trainingErrorSum += entrySet.getValue().getTrainingError();
             validErrorSum += entrySet.getValue().getValidError();
             trainingTimeSum += entrySet.getValue().getCurrentEpochTime();
         }
-        
-        LOG.info("Epoch:" + globalEpoch.get() + 
-                " training error: " + (trainingErrorSum/count) + 
-                " valid error: " + (validErrorSum/count) + 
-                " Time: " + (trainingTimeSum/count));
+
+        LOG.info("Epoch:" + getGlobalEpoch().get() + " training error: " + (trainingErrorSum / count) + " valid error: "
+                + (validErrorSum / count) + " Time: " + (trainingTimeSum / count));
     }
-    
+
     public void process(WatchedEvent event) {
-        if (event == null || StringUtils.isBlank(event.getPath())) {
+        if(event == null || StringUtils.isBlank(event.getPath())) {
             return;
         }
-        
-        if (event.getPath().contains(Constants.TENSORFLOW_CLUSTER_ROOT_PATH)) {
+
+        if(event.getPath().contains(Constants.TENSORFLOW_CLUSTER_ROOT_PATH)) {
             LOG.info("This is tensorflow cluster...");
             // Collect worker ip and port for tensorflow cluster
             String containerId = event.getPath().replace(Constants.TENSORFLOW_CLUSTER_ROOT_PATH, "");
@@ -525,51 +529,51 @@ public class TensorflowSession implements Watcher {
                 TensorflowTask task = this.containerIdToTask.get(containerId);
                 tensorflowClusterSpec.add(task.getJobName(), Integer.valueOf(task.getTaskIndex()), ipAndPort);
             } catch (Exception e) {
-                LOG.error("Getting worker port fails.", e);
                 throw new RuntimeException(e);
             }
 
             int readyContainersNumber = tensorflowClusterSpec.totalWorkerAndPs();
             if(readyContainersNumber == numRequestedContainers) {
-                LOG.info("Get all host and port from containers");
+                LOG.info("Get all tensorflow cluster host and port from containers");
                 try {
                     zookeeperServer.createOrSetExt(Constants.TENSORFLOW_FINAL_CLUSTER,
                             tensorflowClusterSpec.toString().getBytes(Charset.forName("UTF-8")), Ids.OPEN_ACL_UNSAFE,
                             CreateMode.PERSISTENT, true, -1);
                 } catch (Exception e) {
-                    LOG.fatal("Writing final cluster spec to zookeeper fails.", e);
                     throw new RuntimeException(e);
                 }
             } else if(readyContainersNumber < numRequestedContainers) {
-                LOG.info("total: " + numRequestedContainers + ", ready: " + readyContainersNumber);
+                LOG.info("Total requested containers: " + numRequestedContainers + ", ready containers: "
+                        + readyContainersNumber);
             } else {
-                LOG.fatal("total: " + numRequestedContainers + ", ready: " + readyContainersNumber);
+                LOG.error("Total requested containers: " + numRequestedContainers + ", ready containers: "
+                        + readyContainersNumber);
             }
-        } else if (event.getPath().contains(Constants.WORKER_INTERMEDIATE_RESULT_ROOT_PATH)) {
-            //LOG.info("This is worker intermediate result...");
+        } else if(event.getPath().contains(Constants.WORKER_INTERMEDIATE_RESULT_ROOT_PATH)) {
+            // LOG.info("This is worker intermediate result...");
             String containerId = event.getPath().replace(Constants.WORKER_INTERMEDIATE_RESULT_ROOT_PATH, "");
-            synchronized (TensorflowSession.class) {
+            synchronized(TensorflowSession.class) {
                 try {
-                    TrainingIntermediateResult intermediateResult = 
-                            new TrainingIntermediateResult(zookeeperServer.getData(event.getPath(), this, null));
+                    TrainingIntermediateResult intermediateResult = new TrainingIntermediateResult(
+                            zookeeperServer.getData(event.getPath(), this, null));
                     int currentEpoch = intermediateResult.getCurrentEpochStep();
-                    if (currentEpoch < globalEpoch.get()) {
+                    if(currentEpoch < getGlobalEpoch().get()) {
                         // ignore stale information
-                    } else if (currentEpoch == globalEpoch.get()) {
+                    } else if(currentEpoch == getGlobalEpoch().get()) {
                         intermediateResults.putIfAbsent(containerId, intermediateResult);
                     } else {
                         // this is the start of next epoch, so we need to calculate current epoch
-                        LOG.info("Epoch " + globalEpoch + " is finish..");
+                        LOG.info("Epoch " + getGlobalEpoch() + " is finish..");
                         doStatistic();
-                        
+
                         // do clean
                         intermediateResults.clear();
-                        globalEpoch.incrementAndGet();
-                        
+                        getGlobalEpoch().incrementAndGet();
+
                         // add current into new map for next epoch
                         intermediateResults.putIfAbsent(containerId, intermediateResult);
                     }
-                    
+
                 } catch (Exception e) {
                     LOG.error("Getting worker intermediate result fails.", e);
                     throw new RuntimeException(e);
@@ -594,27 +598,27 @@ public class TensorflowSession implements Watcher {
     public Configuration getGlobalConf() {
         return this.globalConf;
     }
-    
+
     public Map<String, TensorflowTask[]> getJobNameToTasks() {
         return jobNameToTasks;
     }
-    
+
     public Map<String, ConcurrentLinkedQueue<TensorflowTask>> getJobNameToBackupTask() {
         return jobNameToBackupTask;
     }
-    
+
     class TensorflowClusterSpec {
         // In order to make spec host order same as task order
         private String[] ps;
         private String[] worker;
         private int readyPsCnt = 0;
         private int readyWorkerCnt = 0;
-        
+
         TensorflowClusterSpec(int psTaskCnt, int workerTaskCnt) {
             ps = new String[psTaskCnt];
             worker = new String[workerTaskCnt];
         }
-        
+
         public synchronized void add(String jobName, int taskId, String hostnamePort) {
             if("ps".equalsIgnoreCase(jobName)) {
                 ps[taskId] = hostnamePort;
@@ -628,15 +632,15 @@ public class TensorflowSession implements Watcher {
         public String[] getPs() {
             return ps;
         }
-        
+
         public String[] getWorker() {
             return worker;
         }
-        
+
         public synchronized int totalWorkerAndPs() {
             return readyWorkerCnt + readyPsCnt;
         }
-        
+
         public String toString() {
             ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
             try {
@@ -644,7 +648,7 @@ public class TensorflowSession implements Watcher {
             } catch (JsonProcessingException e) {
                 LOG.error("transfer cluster failed", e);
             }
-            //return ToStringBuilder.reflectionToString(this, ToStringStyle.JSON_STYLE);
+            // return ToStringBuilder.reflectionToString(this, ToStringStyle.JSON_STYLE);
             return StringUtils.EMPTY;
         }
     }
@@ -652,22 +656,50 @@ public class TensorflowSession implements Watcher {
     /**
      * @param backupWorkerTask
      * @param failedWorkerTaskArrayId
-     * @throws InterruptedException 
-     * @throws KeeperException 
+     * @throws InterruptedException
+     * @throws KeeperException
      */
-    public void weakupBackup(TensorflowTask backupWorkerTask, Integer failedWorkerTaskArrayId) throws KeeperException, InterruptedException {
+    public void weakupBackup(TensorflowTask backupWorkerTask, Integer failedWorkerTaskArrayId)
+            throws KeeperException, InterruptedException {
         TensorflowTask[] workers = this.jobNameToTasks.get(Constants.WORKER_JOB_NAME);
         TensorflowTask failedWorkerTask = workers[failedWorkerTaskArrayId];
         backupWorkerTask.setTrainingDataPaths(failedWorkerTask.getTrainingDataPaths());
-        
+
         // write data path into zookeeper so that to weak up backup task
         LOG.info("failedWorkerTask.getTrainingDataPaths(): " + failedWorkerTask.getTrainingDataPaths());
-        zookeeperServer.createOrSetExt(Constants.getTrainingDataZookeeperPath(
-                backupWorkerTask.getContainer().getId().toString()),
-                failedWorkerTask.getTrainingDataPaths().getBytes(Charset.forName("UTF-8")), 
-                Ids.OPEN_ACL_UNSAFE,
+        zookeeperServer.createOrSetExt(
+                Constants.getTrainingDataZookeeperPath(backupWorkerTask.getContainer().getId().toString()),
+                failedWorkerTask.getTrainingDataPaths().getBytes(Charset.forName("UTF-8")), Ids.OPEN_ACL_UNSAFE,
                 CreateMode.PERSISTENT, true, -1);
-        
+
         workers[failedWorkerTaskArrayId] = backupWorkerTask;
+    }
+
+    /**
+     * @return the globalEpoch
+     */
+    public AtomicInteger getGlobalEpoch() {
+        return globalEpoch;
+    }
+
+    /**
+     * @param globalEpoch the globalEpoch to set
+     */
+    public void setGlobalEpoch(AtomicInteger globalEpoch) {
+        this.globalEpoch = globalEpoch;
+    }
+
+    /**
+     * @return the totalEpochs
+     */
+    public int getTotalEpochs() {
+        return totalEpochs;
+    }
+
+    /**
+     * @param totalEpochs the totalEpochs to set
+     */
+    public void setTotalEpochs(int totalEpochs) {
+        this.totalEpochs = totalEpochs;
     }
 }
