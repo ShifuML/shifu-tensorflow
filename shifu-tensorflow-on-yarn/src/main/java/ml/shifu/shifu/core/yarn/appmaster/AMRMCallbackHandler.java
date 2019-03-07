@@ -50,6 +50,7 @@ import org.apache.hadoop.yarn.util.AbstractLivelinessMonitor;
 
 import com.google.common.base.Preconditions;
 
+import ml.shifu.shifu.core.yarn.appmaster.TensorflowSession.SessionState;
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
 import ml.shifu.shifu.core.yarn.util.Constants;
 import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
@@ -196,6 +197,13 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
             ctx.setTokens(this.allTokens.slice());
 
             nmClientAsync.startContainerAsync(container, ctx);
+        }
+        
+        // if all task have container, it mean session will go to next stage which is register cluster
+        if (session.isAllTaskAssignedContainer()) {
+            session.setState(SessionState.REGESTERING_CLUSTER);
+            session.setStartTimeOfRegisteringCluster(System.currentTimeMillis());
+            LOG.info("Session goes to REGESTERING_CLUSTER");
         }
     }
 

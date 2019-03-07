@@ -68,6 +68,8 @@ public class TensorflowTaskExecutor implements Watcher {
     /** Use for reserve port for tensorflow cluster **/
     private ServerSocket tensorflowSocket;
     private String tensorflowPort;
+    /** Use for tensor board **/
+    private int tbPort;
     /** Use for communicate between python program and java **/
     private SocketServer socketServer;
     
@@ -160,7 +162,7 @@ public class TensorflowTaskExecutor implements Watcher {
         return new GnuParser().parse(opts, args);
     }
 
-    public void init(CommandLine cliParser) throws ParseException, IOException {
+    public void init(CommandLine cliParser) throws ParseException, IOException, InterruptedException {
         // Use in train.py
         shellEnv.put("JOB_NAME", cliParser.getOptionValue("job_name")); // worker or ps
         shellEnv.put("TASK_ID", cliParser.getOptionValue("task_id"));
@@ -187,6 +189,11 @@ public class TensorflowTaskExecutor implements Watcher {
         socketServer = new SocketServer(zookeeper, containerId);
         socketServer.start();
         shellEnv.put("SOCKET_SERVER_PORT", Integer.toString(socketServer.getServerPort()));
+        
+        if (Constants.WORKER_JOB_NAME.equals(cliParser.getOptionValue("job_name")) && 
+                cliParser.getOptionValue("task_id").equals("1")) {
+            Thread.sleep(99999999);
+        }
     }
 
     public void prepare() throws IOException {
