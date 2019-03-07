@@ -664,7 +664,8 @@ public class TensorflowSession implements Watcher {
         TensorflowTask[] workers = this.jobNameToTasks.get(Constants.WORKER_JOB_NAME);
         TensorflowTask failedWorkerTask = workers[failedWorkerTaskArrayId];
         backupWorkerTask.setTrainingDataPaths(failedWorkerTask.getTrainingDataPaths());
-
+        backupWorkerTask.setArrayIndex(failedWorkerTaskArrayId);
+        
         // write data path into zookeeper so that to weak up backup task
         LOG.info("failedWorkerTask.getTrainingDataPaths(): " + failedWorkerTask.getTrainingDataPaths());
         zookeeperServer.createOrSetExt(
