@@ -440,7 +440,7 @@ public class TensorflowClient implements AutoCloseable{
                 Constants.GLOBAL_FINAL_XML,
                 localResources
                 );
-
+        
         // add lib jar that AM needed from hdfs to resource map
         uploadToHdfsAddIntoResourseMap(hdfs, 
                 Constants.JAR_LIB_ZIP, 
@@ -451,7 +451,7 @@ public class TensorflowClient implements AutoCloseable{
                 );
         
         HDFSUtils.getLocalFS().delete(new Path(Constants.JAR_LIB_ZIP));
-        
+        HDFSUtils.getLocalFS().delete(new Path(localGlobalFinalConfPath));
 //          uploadToHdfsAddIntoResourseMap(hdfs, 
 //              "/hadoop/home/webai/tensorflow-shifu/shifu-0.12.1-SNAPSHOT/lib/shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar", 
 //              LocalResourceType.FILE, 
