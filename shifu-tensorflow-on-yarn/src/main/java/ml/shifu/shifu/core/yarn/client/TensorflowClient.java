@@ -453,13 +453,7 @@ public class TensorflowClient implements AutoCloseable {
 
         HDFSUtils.getLocalFS().delete(new Path(Constants.JAR_LIB_ZIP));
 
-        // uploadToHdfsAddIntoResourseMap(hdfs,
-        // "/hadoop/home/webai/tensorflow-shifu/shifu-0.12.1-SNAPSHOT/lib/shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar",
-        // LocalResourceType.FILE,
-        // new Path(this.appResourcesPath, "shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar"),
-        // "shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar", // archive file will be unzip under "lib" folder
-        // localResources
-        // );
+        HDFSUtils.getLocalFS().delete(new Path(localGlobalFinalConfPath));
 
         // Set logs to be readable by everyone. Set app to be modifiable only by app owner.
         Map<ApplicationAccessType, String> acls = new HashMap<ApplicationAccessType, String>(2);

@@ -229,8 +229,8 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster{
                 break;
             }
             
-            if (session.getFailedPs().size() > 0) {
-                LOG.info("Some PS fails, could not continue...");
+            if (session.getFailedPs().size() >= session.getNumTotalPsTasks()) {
+                LOG.info("All PS fails, training could not continue..");
                 break;
             }
             
@@ -275,7 +275,7 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster{
         }
         
         // if any ps fails, cannot recover
-        if (session.getFailedPs().size() > 0) {
+        if (session.getFailedPs().size() >= session.getNumTotalPsTasks()) {
             return false;
         }
         
