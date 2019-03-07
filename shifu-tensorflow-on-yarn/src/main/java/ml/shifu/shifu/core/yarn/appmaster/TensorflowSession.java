@@ -568,7 +568,7 @@ public class TensorflowSession implements Watcher {
 
                         // do clean
                         intermediateResults.clear();
-                        getGlobalEpoch().incrementAndGet();
+                        getGlobalEpoch().set(currentEpoch);
 
                         // add current into new map for next epoch
                         intermediateResults.putIfAbsent(containerId, intermediateResult);
