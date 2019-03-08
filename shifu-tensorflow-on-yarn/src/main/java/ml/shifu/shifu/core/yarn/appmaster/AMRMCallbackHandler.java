@@ -140,8 +140,12 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
                 LOG.info(diagnostics);
             }
             TensorflowTask task = session.getTaskByContainerId(containerStatus.getContainerId());
-
             if(task != null) {
+                LOG.warn("container : [" + containerStatus.getContainerId() + "] isregister!" + task.isRegister());
+                if (!task.isRegister()) {
+                    LOG.warn("container : [" + containerStatus.getContainerId() + "] does not register!");
+                    continue;
+                }
                 // Update Tensorflow Session on the state of the task.
                 session.onTaskCompleted(task.getJobName(), task.getTaskIndex(), exitStatus);
 
