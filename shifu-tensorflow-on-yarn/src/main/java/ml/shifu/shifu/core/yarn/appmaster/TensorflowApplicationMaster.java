@@ -234,7 +234,7 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
                 //  abandon those are not ready
                 if (isChiefWorkerReady &&
                         readyPsCnt == totalPsCnt &&
-                        readyWorkerCnt > totalWorkerCnt*0.95 &&
+                        readyWorkerCnt > totalWorkerCnt * Constants.MIN_WORKERS_START_TRAINING_THREASHOLD &&
                         (System.currentTimeMillis() - session.getStartTimeOfRegisteringCluster()) > 
                             Constants.TIMEOUT_WAITING_CLUSTER_REGISTER) {
                     LOG.warn("We wait cluster register too long time, we are going to ignore worker cnt: " + (totalWorkerCnt-readyWorkerCnt));

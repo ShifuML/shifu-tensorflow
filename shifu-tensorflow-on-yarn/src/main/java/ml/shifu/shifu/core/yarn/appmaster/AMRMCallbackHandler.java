@@ -15,7 +15,6 @@
  */
 package ml.shifu.shifu.core.yarn.appmaster;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
