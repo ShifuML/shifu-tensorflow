@@ -89,6 +89,10 @@ public class Constants {
     public static final double WORKER_FAULT_TOLERENANCE_THRESHOLD = 0.1d;
     public static final double PS_FAULT_TOLERNANCE_THREAHOLD = 0.9d;
     
+    /** we will wait six minute, after that, we will do as best we can **/
+    public static final int TIMEOUT_WAITING_CLUSTER_REGISTER = 6 * 60 * 1000;
+    public static final double MIN_WORKERS_START_TRAINING_THREASHOLD = 0.95;
+    
     public static final FileSystem hdfs = HDFSUtils.getFS();
     public static final Path getAppResourcePath(String appId) {
         return new Path(new Path(File.separator + YARN_TMP, SHIFU_TENSORFLOW_HDFS_DIR), appId);

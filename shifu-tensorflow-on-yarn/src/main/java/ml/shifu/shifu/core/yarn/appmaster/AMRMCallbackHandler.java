@@ -15,7 +15,6 @@
  */
 package ml.shifu.shifu.core.yarn.appmaster;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -50,6 +49,7 @@ import org.apache.hadoop.yarn.util.AbstractLivelinessMonitor;
 
 import com.google.common.base.Preconditions;
 
+import ml.shifu.shifu.core.yarn.appmaster.TensorflowSession.SessionState;
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
 import ml.shifu.shifu.core.yarn.util.Constants;
 import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
@@ -139,8 +139,12 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
                 LOG.info(diagnostics);
             }
             TensorflowTask task = session.getTaskByContainerId(containerStatus.getContainerId());
-
             if(task != null) {
+                LOG.warn("container : [" + containerStatus.getContainerId() + "] isregister!" + task.isRegister());
+                if (!task.isRegister()) {
+                    LOG.warn("container : [" + containerStatus.getContainerId() + "] does not register!");
+                    continue;
+                }
                 // Update Tensorflow Session on the state of the task.
                 session.onTaskCompleted(task.getJobName(), task.getTaskIndex(), exitStatus);
 
@@ -196,6 +200,13 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
             ctx.setTokens(this.allTokens.slice());
 
             nmClientAsync.startContainerAsync(container, ctx);
+        }
+        
+        // if all task have container, it mean session will go to next stage which is register cluster
+        if (session.isAllTaskAssignedContainer()) {
+            session.setState(SessionState.REGESTERING_CLUSTER);
+            session.setStartTimeOfRegisteringCluster(System.currentTimeMillis());
+            LOG.info("Session goes to REGESTERING_CLUSTER");
         }
     }
 

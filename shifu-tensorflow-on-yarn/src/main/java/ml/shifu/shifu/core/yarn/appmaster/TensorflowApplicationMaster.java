@@ -15,6 +15,8 @@
  */
 package ml.shifu.shifu.core.yarn.appmaster;
 
+import java.nio.charset.Charset;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -23,6 +25,7 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -32,11 +35,16 @@ import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.client.api.async.AMRMClientAsync;
+import org.apache.hadoop.yarn.client.api.async.NMClientAsync;
 import org.apache.hadoop.yarn.client.api.async.impl.NMClientAsyncImpl;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.util.AbstractLivelinessMonitor;
 import org.apache.hadoop.yarn.util.ConverterUtils;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.ZooDefs.Ids;
 
+import ml.shifu.shifu.core.yarn.appmaster.TensorflowSession.SessionState;
+import ml.shifu.shifu.core.yarn.appmaster.TensorflowSession.TensorflowClusterSpec;
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
 import ml.shifu.shifu.core.yarn.util.Constants;
 import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
@@ -46,7 +54,7 @@ import ml.shifu.shifu.util.HDFSUtils;
  * @author webai
  *
  */
-public class TensorflowApplicationMaster extends AbstractApplicationMaster{
+public class TensorflowApplicationMaster extends AbstractApplicationMaster {
     private static final Log LOG = LogFactory.getLog(TensorflowApplicationMaster.class);
 
     /** HeartBeat monitor **/
@@ -205,9 +213,103 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster{
     @Override
     protected boolean monitor() {
         long expireTime = appTimeout == 0 ? Long.MAX_VALUE : System.currentTimeMillis() + appTimeout;
-        int counter = 0;
         while(true) {
-            counter += 1;
+            if (session.getState() == SessionState.REGESTERING_CLUSTER) {
+                // In order to prevent program waiting long time for one or two slow container starting,
+                // here we do some logic to ingore those small number of slow container and starting training with whatever we 
+                // have now.
+                LOG.info("Session is REGESTERING_CLUSTER, we do check.");
+                int readyPsCnt = session.getTensorflowClusterSpec()._getReadyPsCnt();
+                int readyWorkerCnt = session.getTensorflowClusterSpec()._getReadyWorkerCnt();
+                int totalPsCnt = session.getNumTotalPsTasks();
+                int totalWorkerCnt = session.getNumTotalBackupWorkerTask() + session.getNumTotalWorkerTasks();
+                boolean isChiefWorkerReady = session.getTensorflowClusterSpec()._isChiefWorkerReady();
+                
+                LOG.warn("readyPsCnt:" + readyPsCnt +
+                        "totalPsCnt: " + totalPsCnt +
+                        "readyWorkerCnt: " + readyWorkerCnt + 
+                        "totalWorkerCnt: " + totalWorkerCnt);
+                
+                // if all ps and 95% of workers are ready and waiting time over 10 minuetes, we will continue training and 
+                //  abandon those are not ready
+                if (isChiefWorkerReady &&
+                        readyPsCnt == totalPsCnt &&
+                        readyWorkerCnt > totalWorkerCnt * Constants.MIN_WORKERS_START_TRAINING_THREASHOLD &&
+                        (System.currentTimeMillis() - session.getStartTimeOfRegisteringCluster()) > 
+                            Constants.TIMEOUT_WAITING_CLUSTER_REGISTER) {
+                    LOG.warn("We wait cluster register too long time, we are going to ignore worker cnt: " + (totalWorkerCnt-readyWorkerCnt));
+                    
+                    // we use every worker cluster now, and start training. do not accept any other workers
+                    session.setState(SessionState.TRAINING);
+                    
+                    // re-arrange tensorflowCluster and task list to make sure order of host is same with task id
+                    TensorflowClusterSpec cluster = session.getTensorflowClusterSpec();
+                    int backCursor = totalWorkerCnt - 1;
+                    for (int i = 0; i < backCursor; i++) {
+                        if (StringUtils.isBlank(cluster.getWorker()[i])) {
+                            while(StringUtils.isBlank(cluster.getWorker()[backCursor])) {
+                                backCursor -= 1;
+                            }
+                            if (backCursor > i) {
+                                LOG.info("we are going to use task: " + backCursor + " to replace " + i);
+                                
+                                // use back end one to replace front missing one, backup definetly be backup worker
+                                // Otherwise it means all backup worker are dead which does not happened
+                                TensorflowTask replacement = 
+                                        session.getTaskFromBackupTasks(Constants.WORKER_JOB_NAME, Integer.toString(backCursor));
+                                cluster.getWorker()[i] = cluster.getWorker()[backCursor];
+                                cluster.getWorker()[backCursor] = null;
+                                
+                                TensorflowTask target = null;
+                                if (i+1 > session.getNumTotalWorkerTasks()) {
+                                    // this is backup worker
+                                    target = session.getTaskFromBackupTasks(Constants.WORKER_JOB_NAME, Integer.toString(i));
+                                    // remove this from backup list from session
+                                    session.getJobNameToBackupTask().get(Constants.WORKER_JOB_NAME).remove(target);
+                                } else {
+                                    target = session.getTaskFromNormalTasks(Constants.WORKER_JOB_NAME, Integer.toString(i));
+                                    // replace replacement in target place
+                                    session.getJobNameToTasks().get(Constants.WORKER_JOB_NAME)[i] = replacement;
+                                    
+                                    // weakup backup worker
+                                    session.weakupBackup(replacement, target.getTrainingDataPaths());
+                                }
+                                
+                                // remove replacement from backup list because it has new place already
+                                session.getJobNameToBackupTask().get(Constants.WORKER_JOB_NAME).remove(replacement);
+                                replacement.setArrayIndex(target.getArrayIndex());
+                                replacement.setTaskIndex(target.getTaskIndex());
+                                replacement.setTrainingDataPaths(target.getTrainingDataPaths());
+                                
+                                session.stopContainer(nmClientAsync, target.getContainer());
+                                
+                                backCursor -= 1;
+                            }
+                        }
+                    }
+                    
+                    // re-arrange array of cluster to remove null element
+                    session.getJobNameToBackupTaskNum().put(Constants.WORKER_JOB_NAME, readyWorkerCnt-session.getNumTotalWorkerTasks());
+                    cluster.setWorker(Arrays.copyOfRange(cluster.getWorker(), 0, readyWorkerCnt));
+                    
+                    LOG.info("Left Backup worker : " + (readyWorkerCnt-session.getNumTotalWorkerTasks()));
+                    
+                    try {
+                        TensorflowSession.getZookeeperServer().createOrSetExt(Constants.TENSORFLOW_FINAL_CLUSTER,
+                                session.getTensorflowClusterSpec().toString().getBytes(Charset.forName("UTF-8")), 
+                                Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT, true, -1);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                
+                if ((System.currentTimeMillis() - session.getStartTimeOfRegisteringCluster()) > 10 * 60 * 1000) {
+                    LOG.error("Wait too long for registering cluster. Please restart training....");
+                    return true;
+                }
+            }
+            
+            
             // Checking timeout
             if(System.currentTimeMillis() > expireTime) {
                 LOG.error("Application times out.");

@@ -20,6 +20,7 @@ import java.util.Objects;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.Container;
+import org.mortbay.log.Log;
 
 import ml.shifu.shifu.core.yarn.container.TensorflowTaskExecutor;
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
@@ -31,7 +32,7 @@ import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
  */
 public class TensorflowTask {
     private final String jobName;
-    private final String taskIndex;
+    private String taskIndex;
     private final int sessionId;
     /** The container the task is running in. Set once a container has been allocated for the task. */
     private Container container;
@@ -41,7 +42,9 @@ public class TensorflowTask {
     private boolean isBackup;
     /** Task index in task array **/
     private int arrayIndex;
-    
+
+    private boolean isRegister = false;
+
     private Configuration globalConf;
 
     public TensorflowTask(String jobName, String taskIndex, int sessionId, Container container,
@@ -72,6 +75,10 @@ public class TensorflowTask {
         return sessionId;
     }
 
+    public void setTaskIndex(String taskId) {
+        taskIndex = taskId;
+    }
+    
     public String getTaskIndex() {
         return taskIndex;
     }
@@ -122,6 +129,15 @@ public class TensorflowTask {
     void setExitStatus(int status) {
         this.completed = true;
         this.exitStatus = status;
+    }
+    
+    public boolean isRegister() {
+        return isRegister;
+    }
+
+    public void setRegister(boolean isRegister) {
+        Log.warn(this.jobName+this.taskIndex+isRegister);
+        this.isRegister = isRegister;
     }
 
     /**

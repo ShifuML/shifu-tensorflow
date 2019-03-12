@@ -59,7 +59,9 @@ public class TensorflowTaskExecutor implements Watcher {
     private GuaguaZooKeeper zookeeper;
     private String containerId;
     private boolean isBackup;
-
+    private String taskIndex;
+    private String jobName;
+    
     /** Use for wait all workers registering on Master **/
     final CountDownLatch latch = new CountDownLatch(1);
     public final CountDownLatch backupStartingLatch = new CountDownLatch(1);
@@ -68,6 +70,8 @@ public class TensorflowTaskExecutor implements Watcher {
     /** Use for reserve port for tensorflow cluster **/
     private ServerSocket tensorflowSocket;
     private String tensorflowPort;
+    /** Use for tensor board **/
+    private int tbPort;
     /** Use for communicate between python program and java **/
     private SocketServer socketServer;
     
@@ -79,7 +83,7 @@ public class TensorflowTaskExecutor implements Watcher {
     private String pythonShell;
     
     /** Process of executing back-up python script **/
-    private Process backupProcess;
+    private Process backupProcess = null;
 
     public TensorflowTaskExecutor()  {
         globalConf.addResource(new Path(Constants.GLOBAL_FINAL_XML));
@@ -111,6 +115,22 @@ public class TensorflowTaskExecutor implements Watcher {
                 Constants.TENSORFLOW_FINAL_CLUSTER.equalsIgnoreCase(event.getPath())) {
             try {
                 tensorflowCluster = new String(zookeeper.getData(Constants.TENSORFLOW_FINAL_CLUSTER, false, null));
+                
+                // reset taskid due to it may changed because current task could be backup task and replaced slow-register task
+                if (this.isBackup) {
+                    String[] fields = tensorflowCluster.split("worker")[1].split(",");
+                    for (int i = 0; i < fields.length; i++) {
+                        if (fields[i].contains(CommonUtils.getCurrentHostIP())) {
+                            if (Integer.valueOf(taskIndex) != i ) {
+                                LOG.info("change taskid from " + taskIndex + " to " + i);
+                                shellEnv.put("TASK_ID", Integer.toString(i));
+                                this.isBackup = false;
+                            }
+                            break;
+                        }
+                    }
+                }
+                
                 LOG.info("Cluster:" + tensorflowCluster);
                 latch.countDown();
             } catch (Exception e) {
@@ -128,10 +148,11 @@ public class TensorflowTaskExecutor implements Watcher {
                 LOG.info("TRAINING_DATA_PATH: " + trainingDataPath);
                 shellEnv.put("TRAINING_DATA_PATH", trainingDataPath); 
                 
-                CommonUtils.killProcessByPort(tensorflowPort);
-                
-                backupProcess.destroy();
-                LOG.info("Killed backup waiting program... " + backupProcess.isAlive());
+                if (backupProcess != null) {
+                    CommonUtils.killProcessByPort(tensorflowPort);
+                    backupProcess.destroy();
+                    LOG.info("Killed backup waiting program... " + backupProcess.isAlive());
+                }
 
                 backupStartingLatch.countDown();
             } catch (Exception e) {
@@ -160,10 +181,12 @@ public class TensorflowTaskExecutor implements Watcher {
         return new GnuParser().parse(opts, args);
     }
 
-    public void init(CommandLine cliParser) throws ParseException, IOException {
+    public void init(CommandLine cliParser) throws ParseException, IOException, InterruptedException {
         // Use in train.py
-        shellEnv.put("JOB_NAME", cliParser.getOptionValue("job_name")); // worker or ps
-        shellEnv.put("TASK_ID", cliParser.getOptionValue("task_id"));
+        taskIndex = cliParser.getOptionValue("task_id");
+        jobName = cliParser.getOptionValue("job_name");
+        shellEnv.put("JOB_NAME", jobName); // worker or ps
+        shellEnv.put("TASK_ID", taskIndex);
         shellEnv.put("TRAINING_DATA_PATH", cliParser.getOptionValue("training_data_path")); // /path/a,/path/b
         // total training data count
         shellEnv.put("TOTAL_TRAINING_DATA_NUMBER", globalConf.get(GlobalConfigurationKeys.TOTAL_TRAINING_DATA_NUM));
@@ -254,6 +277,14 @@ public class TensorflowTaskExecutor implements Watcher {
      */
     public void run() throws IOException, InterruptedException {    
         shellEnv.put("TRAIN_SCRIPT_PATH", pythonScript);
+
+        // This is for this is backup task and replace slow task
+        //  It may take some time for appmaster to send training data to this backup task
+        if (Constants.WORKER_JOB_NAME.equalsIgnoreCase(jobName)) {
+            while(!shellEnv.containsKey("TRAINING_DATA_PATH") || StringUtils.isBlank(shellEnv.get("TRAINING_DATA_PATH"))) {
+                Thread.sleep(1000 * 5);
+            }
+        }
         
         if (!tensorflowSocket.isClosed()) {
             tensorflowSocket.close();
