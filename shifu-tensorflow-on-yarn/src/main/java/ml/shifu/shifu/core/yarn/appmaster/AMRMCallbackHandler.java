@@ -56,6 +56,8 @@ import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
 import ml.shifu.shifu.util.HDFSUtils;
 
 /**
+ * {@link AMRMCallbackHandler} 
+ * 
  * @author webai
  *
  */
@@ -105,27 +107,9 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
         CommonUtils.addResource(new Path(this.appResourcesPath, Constants.JAR_LIB_ZIP), containerResources, hdfs,
                 LocalResourceType.ARCHIVE, Constants.JAR_LIB_ROOT);
 
-        // // add self jar that container needed from hdfs to resource map
-        // try {
-        // String localAppJarPath = globalConf.get(GlobalConfigurationKeys.SHIFU_YARN_APP_JAR);
-        // CommonUtils.addResource(new Path(this.appResourcesPath, new File(localAppJarPath).getName()),
-        // containerResources,
-        // hdfs,
-        // LocalResourceType.FILE,
-        // new File(localAppJarPath).getName());
-        // } catch (Exception e) {
-        // LOG.error("Error getting local app jar path.", e);
-        // }
-
         getAllTokens();
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onContainersCompleted(java.util.List)
-     */
     public void onContainersCompleted(List<ContainerStatus> completedContainers) {
         LOG.info("Completed containers: " + completedContainers.size());
         for(ContainerStatus containerStatus: completedContainers) {
@@ -159,12 +143,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
         }
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onContainersAllocated(java.util.List)
-     */
     public void onContainersAllocated(List<Container> containers) {
         LOG.info("Allocated: " + containers.size() + " containers.");
         for(Container container: containers) {
@@ -212,8 +190,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
 
     /**
      * Populate allTokens with the tokens received
-     * 
-     * @return
      */
     private void getAllTokens() {
         Credentials credentials;
@@ -237,31 +213,14 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
         }
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onShutdownRequest()
-     */
     public void onShutdownRequest() {
-        // TODO Auto-generated method stub
 
     }
-
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onNodesUpdated(java.util.List)
-     */
+    
     public void onNodesUpdated(List<NodeReport> updatedNodes) {
-        // TODO Auto-generated method stub
 
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#getProgress()
-     */
     public float getProgress() {
         if(session.getGlobalEpoch().get() > session.getTotalEpochs()) {
             return 1f;
@@ -269,11 +228,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
         return (float) session.getGlobalEpoch().get() / session.getTotalEpochs();
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onError(java.lang.Throwable)
-     */
     public void onError(Throwable e) {
         LOG.info("Error: stop nmClientAsync" + e);
         nmClientAsync.stop();

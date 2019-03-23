@@ -29,8 +29,10 @@ import org.apache.hadoop.fs.RemoteIterator;
 import ml.shifu.shifu.util.HDFSUtils;
 
 /**
- * @author webai
  * So far, Splitting algorithm is very simple, we only try to split by file number, not considering file size
+ * TODO: split data by size or use norm to split data into different parts
+ * 
+ * @author webai
  */
 public class TrainingDataSet {
     private int workerNum = 0;

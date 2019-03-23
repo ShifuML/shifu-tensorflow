@@ -15,8 +15,6 @@
  */
 package ml.shifu.shifu.core.yarn.util;
 
-import org.apache.commons.lang3.StringUtils;
-
 /**
  * @author webai
  *
@@ -84,10 +82,13 @@ public class GlobalConfigurationKeys {
     public static final String WEIGHT_COLUMN_NUM = SHIFU_APPLICATION_PREFIX + "weight-column-number";
     public static final String TARGET_COLUMN_NUM = SHIFU_APPLICATION_PREFIX + "target-column-number";
     public static final String SELECTED_COLUMN_NUMS = SHIFU_APPLICATION_PREFIX + "selected-column-numbers";
+    public static final String SELECTED_NUMERIC_COLUMN_NUMS = SHIFU_APPLICATION_PREFIX + "selected-numeric-column-numbers";
+    public static final String SELECTED_CATEGORY_COLUMN_NUMS = SHIFU_APPLICATION_PREFIX + "selected-category-column-numbers";
+    
     public static final String TOTAL_TRAINING_DATA_NUM = SHIFU_APPLICATION_PREFIX + "total-training-data-number";
     public static final String DEFAULT_WEIGHT_COLUMN_NUM = "-1";
     public static final String DEFAULT_TARGET_COLUMN_NUM = "0";
-    public static final String DEFAULT_SELECTED_COLUMN_NUMS = StringUtils.EMPTY;
+    public static final String DEFAULT_SELECTED_COLUMN_NUMS = "-1";
 
     public static final String TMP_MODEL_PATH = SHIFU_APPLICATION_PREFIX + "tmp-model-path";
     public static final String FINAL_MODEL_PATH = SHIFU_APPLICATION_PREFIX + "final-model-path";
@@ -101,7 +102,8 @@ public class GlobalConfigurationKeys {
 
     public static final String MODEL_CONF = SHIFU_APPLICATION_PREFIX + "model-conf";
     public static final String COLUMN_CONF = SHIFU_APPLICATION_PREFIX + "column-conf";
-
+    public static final String TMP_LOG_PATH = SHIFU_APPLICATION_PREFIX + "tmp-log-path";
+    
     // user could point out extra jars
     public static final String SHIFU_YARN_LIB_JAR = SHIFU_APPLICATION_PREFIX + "lib-jar";
 

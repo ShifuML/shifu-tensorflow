@@ -25,7 +25,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.cli.Options;
@@ -33,6 +32,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -48,12 +48,12 @@ import ml.shifu.guagua.GuaguaRuntimeException;
 import ml.shifu.guagua.coordinator.zk.ZooKeeperUtils;
 import ml.shifu.shifu.core.yarn.appmaster.TaskUrl;
 import ml.shifu.shifu.core.yarn.appmaster.TensorFlowContainerRequest;
+import ml.shifu.shifu.util.HDFSUtils;
 import net.lingala.zip4j.core.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 
 /**
  * @author webai
- *
  */
 public class CommonUtils {
     private static final Log LOG = LogFactory.getLog(CommonUtils.class);
@@ -82,9 +82,7 @@ public class CommonUtils {
         // Container environment
         // examples for env set variables: --shell_env CLASSPATH=ABC --shell_ENV LD_LIBRARY_PATH=DEF
         opts.addOption("container_env", true, "Environment for the worker containers, specified as key=val pairs");
-        // opts.addOption("shell_env", true, "Environment for shell script, specified as env_key=env_val pairs");
-        // opts.addOption("hdfs_classpath", true, "Path to jars on HDFS for workers.");
-
+        
         return opts;
     }
 
@@ -253,9 +251,9 @@ public class CommonUtils {
         }
         Process taskProcess = taskProcessBuilder.start();
         
-        // For Testing
-        Integer taskId = Integer.valueOf(env.get("TASK_ID"));
-        String jobName = env.get("JOB_NAME");
+/**      For Testing   **/
+//        Integer taskId = Integer.valueOf(env.get("TASK_ID"));
+//        String jobName = env.get("JOB_NAME");
 //        if(timeout > 0 || (jobName.equals("ps") && taskId == 1)) {
 //            taskProcess.waitFor(80000, TimeUnit.MILLISECONDS);
 //            killProcessByPort("2181");
@@ -410,6 +408,39 @@ public class CommonUtils {
         } else {
             throw new RuntimeException("Cannot find a empty port for tensorflow");
         }
+    }
+    
+    public static class ClientConsoleBoard {
+        private Path boardFile;
+        public ClientConsoleBoard(Configuration conf) {
+            boardFile = new Path(conf.get(GlobalConfigurationKeys.TMP_LOG_PATH));;
+            try {
+                if (HDFSUtils.getFS().createNewFile(boardFile)) {
+                    LOG.info("Create boardFile Path:" + boardFile.toString());
+                } else {
+                    LOG.info("boardFile exists:" + boardFile.toString());
+                }
+            } catch (IOException e) {
+                LOG.error("Error create boardFile: " + boardFile, e);
+            }
+        }
         
+        public void showOnBoard(String message) {
+            FSDataOutputStream hdfsLogStream = null;
+            try {
+                hdfsLogStream = HDFSUtils.getFS().append(boardFile);
+                hdfsLogStream.writeBytes(message + "\n");
+            } catch (IOException e) {
+                LOG.error("Error writing message: " + message, e);
+            } finally {
+                if (hdfsLogStream != null) {
+                    try {
+                        hdfsLogStream.close();
+                    } catch (IOException e) {
+                        LOG.error("Error close hdfsLogStream: " + message, e);
+                    }
+                }
+            }
+        }
     }
 }
