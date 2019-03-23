@@ -16,8 +16,8 @@
 package ml.shifu.shifu.core.yarn.appmaster;
 
 /**
+ * Request Object ot store container informations
  * @author webai
- *
  */
 public class TensorFlowContainerRequest {
     private int numInstances;

@@ -20,6 +20,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -70,6 +71,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableList;
 
+import ml.shifu.shifu.core.processor.TrainModelProcessor.TailThread;
 import ml.shifu.shifu.core.yarn.appmaster.TensorflowApplicationMaster;
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
 import ml.shifu.shifu.core.yarn.util.Constants;
@@ -81,8 +83,8 @@ import net.lingala.zip4j.exception.ZipException;
 import net.lingala.zip4j.model.ZipParameters;
 
 /**
+ * {@link TensorflowClient} is used to submit master-workers computation app on yarn cluster.
  * @author webai
- *
  */
 public class TensorflowClient implements AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(TensorflowClient.class);
@@ -133,6 +135,8 @@ public class TensorflowClient implements AutoCloseable {
     public TensorflowClient(Configuration conf) {
         globalConf = conf;
         yarnConf = new YarnConfiguration();
+        // In order to improve performace of PS. https://blog.csdn.net/omnispace/article/details/79864973
+        yarnConf.set("yarn.nodemanager.admin-env", "");
         LOG.info("Client yarn configuration:" + yarnConf.toString());
     }
 
@@ -188,20 +192,13 @@ public class TensorflowClient implements AutoCloseable {
             fs.delete(dstPath);
         }
 
-        // fs.mkdirs(new Path(Constants.JAR_LIB_ROOT));
-
         ZipFile zipFile = new ZipFile(dst);
         ZipParameters zipParameters = new ZipParameters();
-        // zipFile.addFolder(new File(Constants.JAR_LIB_ROOT), zipParameters);
-
-        // zipParameters.setRootFolderInZip(Constants.JAR_LIB_ROOT);
         for(String jar: jars) {
             String path = jar.substring(jar.indexOf(':') + 1);
             File jarFile = new File(path);
-            // zipParameters.setDefaultFolderPath(path.substring(0, path.lastIndexOf('/')));
             zipFile.addFile(jarFile, zipParameters);
         }
-        // fs.delete(new Path(Constants.JAR_LIB_ROOT));
     }
 
     /**
@@ -390,11 +387,20 @@ public class TensorflowClient implements AutoCloseable {
         uploadFileAndSetConfContainerResources(new Path(globalConf.get(GlobalConfigurationKeys.MODEL_CONF)),
                 appResourcesPath, globalConf, hdfs);
 
+        uploadFileAndSetConfContainerResources(new Path(globalConf.get(GlobalConfigurationKeys.COLUMN_CONF)),
+                appResourcesPath, globalConf, hdfs);
+        
+        // add hdfs tmp log file path into global conf so that app master could write result into it
+        String tmpLogPath = Constants.getProgressLogFile();
+        globalConf.set(GlobalConfigurationKeys.TMP_LOG_PATH, tmpLogPath);
+        TailThread tailThread = startTailThread(new String[] { tmpLogPath });
+        
         localGlobalFinalConfPath = Constants.getClientResourcesPath(getAppId().toString(), Constants.GLOBAL_FINAL_XML);
 
         OutputStream os = null;
         try {
             // Write user's overridden conf to an xml to be localized.
+            LOG.info("Writing local: " + localGlobalFinalConfPath);
             os = new FileOutputStream(localGlobalFinalConfPath);
             globalConf.writeXml(os);
         } catch (IOException e) {
@@ -547,11 +553,6 @@ public class TensorflowClient implements AutoCloseable {
                 HdfsUtils.$$(ApplicationConstants.Environment.CLASSPATH.toString()))
                         .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./*").append(HdfsUtils.CLASS_PATH_SEPARATOR)
                         .append("./" + Constants.JAR_LIB_ROOT + "/*");
-        // .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/shifu-tensorflow-on-yarn-0.0.1-SNAPSHOT.jar");
-        // .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/zip4j-1.3.2.jar")
-        // .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/guagua-mapreduce-0.7.8-hadoop2.jar")
-        // .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/guagua-core-0.7.8.jar")
-        // .append(HdfsUtils.CLASS_PATH_SEPARATOR).append("./lib/shifu-0.12.1-SNAPSHOT.jar");
 
         for(String c: yarnConf.getStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH,
                 HdfsUtils.DEFAULT_YARN_CROSS_PLATFORM_APPLICATION_CLASSPATH)) {
@@ -832,5 +833,19 @@ public class TensorflowClient implements AutoCloseable {
      */
     public void setAppName(String appName) {
         this.appName = appName;
+    }
+    
+    private TailThread startTailThread(final String[] progressLog) {
+        TailThread thread = new TailThread(progressLog);
+        thread.setName("Training Progress");
+        thread.setDaemon(true);
+        thread.setUncaughtExceptionHandler(new UncaughtExceptionHandler() {
+            @Override
+            public void uncaughtException(Thread t, Throwable e) {
+                LOG.warn(String.format("Error in thread %s: %s", t.getName(), e.getMessage()));
+            }
+        });
+        thread.start();
+        return thread;
     }
 }

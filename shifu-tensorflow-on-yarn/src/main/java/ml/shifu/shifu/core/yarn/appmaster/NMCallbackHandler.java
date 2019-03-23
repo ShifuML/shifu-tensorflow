@@ -31,68 +31,26 @@ import org.apache.hadoop.yarn.client.api.async.NMClientAsync;
 public class NMCallbackHandler implements NMClientAsync.CallbackHandler {
     private static final Log LOG = LogFactory.getLog(NMCallbackHandler.class);
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.apache.hadoop.yarn.client.api.async.NMClientAsync.CallbackHandler#onContainerStarted(org.apache.hadoop.yarn.
-     * api.records.ContainerId, java.util.Map)
-     */
     public void onContainerStarted(ContainerId containerId, Map<String, ByteBuffer> allServiceResponse) {
         LOG.info("Successfully started container " + containerId);
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.apache.hadoop.yarn.client.api.async.NMClientAsync.CallbackHandler#onContainerStatusReceived(org.apache.hadoop
-     * .yarn.api.records.ContainerId, org.apache.hadoop.yarn.api.records.ContainerStatus)
-     */
     public void onContainerStatusReceived(ContainerId containerId, ContainerStatus containerStatus) {
         LOG.info("Container Status: id =" + containerId + ", status =" + containerStatus);
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.apache.hadoop.yarn.client.api.async.NMClientAsync.CallbackHandler#onContainerStopped(org.apache.hadoop.yarn.
-     * api.records.ContainerId)
-     */
     public void onContainerStopped(ContainerId containerId) {
         LOG.info("Succeeded to stop container " + containerId);
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.apache.hadoop.yarn.client.api.async.NMClientAsync.CallbackHandler#onGetContainerStatusError(org.apache.hadoop
-     * .yarn.api.records.ContainerId, java.lang.Throwable)
-     */
     public void onGetContainerStatusError(ContainerId containerId, Throwable throwable) {
         LOG.error("Failed to query the status of container " + containerId, throwable);
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.apache.hadoop.yarn.client.api.async.NMClientAsync.CallbackHandler#onStartContainerError(org.apache.hadoop.
-     * yarn.api.records.ContainerId, java.lang.Throwable)
-     */
     public void onStartContainerError(ContainerId containerId, Throwable t) {
         LOG.error("Failed to start container " + containerId, t);
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.apache.hadoop.yarn.client.api.async.NMClientAsync.CallbackHandler#onStopContainerError(org.apache.hadoop.yarn
-     * .api.records.ContainerId, java.lang.Throwable)
-     */
     public void onStopContainerError(ContainerId containerId, Throwable t) {
         LOG.error("Failed to stop container " + containerId, t);
     }

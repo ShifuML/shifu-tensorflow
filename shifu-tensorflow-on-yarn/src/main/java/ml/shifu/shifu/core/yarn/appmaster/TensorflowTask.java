@@ -27,6 +27,8 @@ import ml.shifu.shifu.core.yarn.util.CommonUtils;
 import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
 
 /**
+ * Within tensorflow session, each container take a task. each task has role and taskID
+ * 
  * @author webai
  *
  */
@@ -118,13 +120,6 @@ public class TensorflowTask {
     public void setTrainingDataPaths(String trainingDataPaths) {
         this.trainingDataPaths = trainingDataPaths;
     }
-//    public String getHostNameAndPort() {
-//        return String.format("%s:%s", getHostName(), StringUtils.isBlank(tensorflowPort) ? 0 : tensorflowPort);
-//    }
-//
-//    public void setTensorflowPort(String port) {
-//        tensorflowPort = port;
-//    }
 
     void setExitStatus(int status) {
         this.completed = true;
