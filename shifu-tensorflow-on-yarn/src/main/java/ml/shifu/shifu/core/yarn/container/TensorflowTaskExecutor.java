@@ -294,7 +294,7 @@ public class TensorflowTaskExecutor implements Watcher {
      * @throws InterruptedException
      * @throws IOException
      */
-    public void run() throws IOException, InterruptedException {    
+    public int run() throws IOException, InterruptedException {    
         shellEnv.put("TRAIN_SCRIPT_PATH", pythonScript);
 
         // This is for this is backup task and replace slow task
@@ -309,7 +309,7 @@ public class TensorflowTaskExecutor implements Watcher {
             tensorflowSocket.close();
         }
 
-        CommonUtils.executeShell(pythonShell, 0, shellEnv);
+        return CommonUtils.executeShell(pythonShell, 0, shellEnv);
     }
     
     public static void main(String[] args) throws Exception {
@@ -338,10 +338,10 @@ public class TensorflowTaskExecutor implements Watcher {
             executor.backupStartingLatch.await();
         }
 
-        executor.run();
+        int result = executor.run();
         
         LOG.info("current worker finish..");
-        System.exit(0);
+        System.exit(result);
     }
     
     public boolean isBackup() {
