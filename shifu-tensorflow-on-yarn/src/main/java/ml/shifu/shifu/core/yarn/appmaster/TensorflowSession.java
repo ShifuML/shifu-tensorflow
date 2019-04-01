@@ -118,9 +118,9 @@ public class TensorflowSession implements Watcher {
 
     // Record session state for monitoring
     private SessionState state;
-    
+
     private long startTimeOfRegisteringCluster;
-    
+
     public TensorflowSession() {
         setState(SessionState.INIT);
     }
@@ -130,7 +130,7 @@ public class TensorflowSession implements Watcher {
         this.totalEpochs = this.globalConf.getInt(GlobalConfigurationKeys.SHIFU_APPLICATION_EPOCHS, -1);
         this.containerRequests = CommonUtils.parseContainerRequests(this.globalConf);
         setState(SessionState.INIT);
-        
+
         // create zookeeper server for sync tensorflow cluster spec
         // This has been settled in prepare of AM
         if(zookeeperServer == null) {
@@ -481,7 +481,7 @@ public class TensorflowSession implements Watcher {
                 + container.getNodeId().getHost());
         nmClientAsync.stopContainerAsync(container.getId(), container.getNodeId());
     }
-    
+
     public boolean isChiefWorkerComplete() {
         return isChiefWorkerComplete;
     }
@@ -497,7 +497,7 @@ public class TensorflowSession implements Watcher {
     public int getNumTotalBackupWorkerTask() {
         return jobNameToBackupTaskNum.get(Constants.WORKER_JOB_NAME);
     }
-    
+
     public int getNumTotalWorkerTasks() {
         return jobNameToTaskNum.get(Constants.WORKER_JOB_NAME);
     }
@@ -513,25 +513,28 @@ public class TensorflowSession implements Watcher {
     public ConcurrentLinkedQueue<String> getFailedPs() {
         return failedPs;
     }
-    
+
     public Map<String, Integer> getJobNameToBackupTaskNum() {
         return jobNameToBackupTaskNum;
     }
-    
+
     private void doStatistic() {
         int count = intermediateResults.size();
         double trainingErrorSum = 0.0d;
         double validErrorSum = 0.0d;
         double trainingTimeSum = 0.0d;
+        double validTimeSum = 0.0d;
 
         for(Entry<String, TrainingIntermediateResult> entrySet: intermediateResults.entrySet()) {
-            trainingErrorSum += entrySet.getValue().getTrainingError();
-            validErrorSum += entrySet.getValue().getValidError();
-            trainingTimeSum += entrySet.getValue().getCurrentEpochTime();
+            TrainingIntermediateResult tir = entrySet.getValue();
+            trainingErrorSum += tir.getTrainingError();
+            validErrorSum += tir.getValidError();
+            trainingTimeSum += tir.getCurrentEpochTime();
+            validTimeSum += tir.getCurrentEpochValidTime();
         }
-
-        LOG.info("Epoch:" + getGlobalEpoch().get() + " training error: " + (trainingErrorSum / count) + " valid error: "
-                + (validErrorSum / count) + " Time: " + (trainingTimeSum / count));
+        LOG.info("Epoch: " + getGlobalEpoch().get() + " training error: " + (trainingErrorSum / count)
+                + " valid error: " + (validErrorSum / count) + " training avg time: " + (trainingTimeSum / count)
+                + " valid avg time: " + (validTimeSum / count));
     }
 
     public void process(WatchedEvent event) {
@@ -543,12 +546,13 @@ public class TensorflowSession implements Watcher {
             // Collect worker ip and port for tensorflow cluster
             String containerId = event.getPath().replace(Constants.TENSORFLOW_CLUSTER_ROOT_PATH, "");
             TensorflowTask task = this.containerIdToTask.get(containerId);
-            
-            if (this.getState() != SessionState.REGESTERING_CLUSTER) {
-                LOG.warn("Tensorflow session is not REGESTERING_CLUSTER currently but try to register, we will ingore " + task);
+
+            if(this.getState() != SessionState.REGESTERING_CLUSTER) {
+                LOG.warn("Tensorflow session is not REGESTERING_CLUSTER currently but try to register, we will ingore "
+                        + task);
                 return;
             }
-            
+
             LOG.info("This is tensorflow cluster...");
             try {
                 String ipAndPort = new String(zookeeperServer.getData(event.getPath(), null, null));
@@ -613,21 +617,22 @@ public class TensorflowSession implements Watcher {
 
     /**
      * If there is no pending task, it means all tasks have container
+     * 
      * @return
      */
     public boolean isAllTaskAssignedContainer() {
         int sum = 0;
-        for (int i : jobNameToPendingTaskNumber.values()) {
+        for(int i: jobNameToPendingTaskNumber.values()) {
             sum += i;
         }
-        
-        for (int i : jobNameToPendingBackupTaskNumber.values()) {
+
+        for(int i: jobNameToPendingBackupTaskNumber.values()) {
             sum += i;
         }
-        
-        return (sum == 0) ;
+
+        return (sum == 0);
     }
-    
+
     public boolean isChiefWorkerSuccess() {
         return chiefWorkerSuccess;
     }
@@ -659,7 +664,7 @@ public class TensorflowSession implements Watcher {
         private int readyPsCnt = 0;
         private int readyWorkerCnt = 0;
         private boolean isChiefWorkerReady = false;
-        
+
         TensorflowClusterSpec(int psTaskCnt, int workerTaskCnt) {
             ps = new String[psTaskCnt];
             worker = new String[workerTaskCnt];
@@ -673,8 +678,8 @@ public class TensorflowSession implements Watcher {
                 worker[taskId] = hostnamePort;
                 readyWorkerCnt += 1;
             }
-            
-            if (Constants.WORKER_JOB_NAME.equals(jobName) && taskId == 0) {
+
+            if(Constants.WORKER_JOB_NAME.equals(jobName) && taskId == 0) {
                 isChiefWorkerReady = true;
             }
         }
@@ -690,7 +695,7 @@ public class TensorflowSession implements Watcher {
         public void setWorker(String[] worker) {
             this.worker = worker;
         }
-        
+
         public int _getReadyPsCnt() {
             return readyPsCnt;
         }
@@ -698,7 +703,7 @@ public class TensorflowSession implements Watcher {
         public int _getReadyWorkerCnt() {
             return readyWorkerCnt;
         }
-        
+
         public synchronized int totalWorkerAndPs() {
             return readyWorkerCnt + readyPsCnt;
         }
@@ -731,7 +736,7 @@ public class TensorflowSession implements Watcher {
         TensorflowTask failedWorkerTask = workers[failedWorkerTaskArrayId];
         backupWorkerTask.setTrainingDataPaths(failedWorkerTask.getTrainingDataPaths());
         backupWorkerTask.setArrayIndex(failedWorkerTaskArrayId);
-        
+
         // write data path into zookeeper so that to weak up backup task
         LOG.info("failedWorkerTask.getTrainingDataPaths(): " + failedWorkerTask.getTrainingDataPaths());
         zookeeperServer.createOrSetExt(
@@ -744,26 +749,27 @@ public class TensorflowSession implements Watcher {
 
     /**
      * Weak up backup worker with giving training data
+     * 
      * @param backupWorkerTask
      * @param trainingDataPath
-     * @throws InterruptedException 
-     * @throws KeeperException 
+     * @throws InterruptedException
+     * @throws KeeperException
      */
     public void weakupBackup(TensorflowTask backupWorkerTask, String trainingDataPath) {
-        if (StringUtils.isBlank(trainingDataPath)) {
+        if(StringUtils.isBlank(trainingDataPath)) {
             return;
         }
-        
+
         try {
             zookeeperServer.createOrSetExt(
                     Constants.getTrainingDataZookeeperPath(backupWorkerTask.getContainer().getId().toString()),
-                    trainingDataPath.getBytes(Charset.forName("UTF-8")), Ids.OPEN_ACL_UNSAFE,
-                    CreateMode.PERSISTENT, true, -1);
+                    trainingDataPath.getBytes(Charset.forName("UTF-8")), Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT,
+                    true, -1);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
-    
+
     /**
      * @return the globalEpoch
      */
@@ -772,7 +778,8 @@ public class TensorflowSession implements Watcher {
     }
 
     /**
-     * @param globalEpoch the globalEpoch to set
+     * @param globalEpoch
+     *            the globalEpoch to set
      */
     public void setGlobalEpoch(AtomicInteger globalEpoch) {
         this.globalEpoch = globalEpoch;
@@ -786,12 +793,12 @@ public class TensorflowSession implements Watcher {
     }
 
     /**
-     * @param totalEpochs the totalEpochs to set
+     * @param totalEpochs
+     *            the totalEpochs to set
      */
     public void setTotalEpochs(int totalEpochs) {
         this.totalEpochs = totalEpochs;
     }
-    
 
     public TensorflowClusterSpec getTensorflowClusterSpec() {
         return tensorflowClusterSpec;
@@ -800,7 +807,7 @@ public class TensorflowSession implements Watcher {
     public static GuaguaZooKeeper getZookeeperServer() {
         return zookeeperServer;
     }
-    
+
     public long getStartTimeOfRegisteringCluster() {
         return startTimeOfRegisteringCluster;
     }
@@ -808,7 +815,7 @@ public class TensorflowSession implements Watcher {
     public void setStartTimeOfRegisteringCluster(long startTimeOfRegisteringCluster) {
         this.startTimeOfRegisteringCluster = startTimeOfRegisteringCluster;
     }
-    
+
     public SessionState getState() {
         return state;
     }
@@ -818,10 +825,6 @@ public class TensorflowSession implements Watcher {
     }
 
     public enum SessionState {
-        INIT,
-        STARTING_CONTAINER,
-        REGESTERING_CLUSTER,
-        TRAINING,
-        FINISH
+        INIT, STARTING_CONTAINER, REGESTERING_CLUSTER, TRAINING, FINISH
     }
 }

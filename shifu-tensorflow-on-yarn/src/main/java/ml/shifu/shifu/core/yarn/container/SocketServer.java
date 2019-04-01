@@ -34,60 +34,62 @@ import ml.shifu.shifu.core.yarn.util.Constants;
 
 /**
  * This server is used to connect with python program to collect worker training intermediate result:
- *   training error
- *   valid error
- *   execution time of each epoch
+ * training error
+ * valid error
+ * execution time of each epoch
  * 
  * @author webai
  */
-public class SocketServer extends Thread{
+public class SocketServer extends Thread {
     private static final Log LOG = LogFactory.getLog(SocketServer.class);
-    
+
     private ServerSocket server;
     private GuaguaZooKeeper zookeeper;
     private String containerId;
-    
+
     public SocketServer(GuaguaZooKeeper zookeeper, String containerId) throws IOException {
         server = new ServerSocket(0);
         this.zookeeper = zookeeper;
         this.containerId = containerId;
     }
-    
-    public void run(){
+
+    public void run() {
         while(true) {
             try {
                 Socket client = server.accept();
                 LOG.info("got connection on port " + getServerPort());
-                
+
                 BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
                 String rawMessage = in.readLine();
-                
+
                 while(StringUtils.isNotBlank(rawMessage)) {
                     LOG.info("received: " + rawMessage);
-                    
+
                     // parse raw message to give to app master by zookeeper
                     TrainingIntermediateResult intermediate = new TrainingIntermediateResult();
                     String[] fields = rawMessage.split(",");
-                    for (String field: fields) {
+                    for(String field: fields) {
                         String[] keyValue = field.split(":", 2);
-                        if ("worker_index".equals(keyValue[0])) {
-                          intermediate.setWorkerIndex(Integer.valueOf(keyValue[1]));
-                        } else if ("time".equals(keyValue[0])) {
-                          intermediate.setCurrentEpochTime(Double.valueOf(keyValue[1]));
-                        } else if ("current_epoch".equals(keyValue[0])) {
-                          intermediate.setCurrentEpochStep(Integer.valueOf(keyValue[1])); 
-                        } else if ("training_loss".equals(keyValue[0])) {
-                          intermediate.setTrainingError(Double.valueOf(keyValue[1]));
-                        } else if ("valid_loss".equals(keyValue[0])) {
-                          intermediate.setValidError(Double.valueOf(keyValue[1]));
+                        if("worker_index".equals(keyValue[0])) {
+                            intermediate.setWorkerIndex(Integer.valueOf(keyValue[1]));
+                        } else if("time".equals(keyValue[0])) {
+                            intermediate.setCurrentEpochTime(Double.valueOf(keyValue[1]));
+                        } else if("current_epoch".equals(keyValue[0])) {
+                            intermediate.setCurrentEpochStep(Integer.valueOf(keyValue[1]));
+                        } else if("training_loss".equals(keyValue[0])) {
+                            intermediate.setTrainingError(Double.valueOf(keyValue[1]));
+                        } else if("valid_loss".equals(keyValue[0])) {
+                            intermediate.setValidError(Double.valueOf(keyValue[1]));
+                        } else if("valid_time".equals(keyValue[0])) {
+                            intermediate.setCurrentEpochValidTime(Double.valueOf(keyValue[1]));
                         } else {
-                          LOG.warn("There is unexpacted field in message: " + field);  
+                            LOG.warn("There is unexpacted field in message: " + field);
                         }
                     }
                     LOG.info("After Parsing: " + intermediate.toString());
-                    zookeeper.createOrSetExt(Constants.WORKER_INTERMEDIATE_RESULT_ROOT_PATH + containerId, 
+                    zookeeper.createOrSetExt(Constants.WORKER_INTERMEDIATE_RESULT_ROOT_PATH + containerId,
                             intermediate.serialize(), Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT, true, -1);
-                    
+
                     rawMessage = in.readLine();
                 }
             } catch (IOException e) {
@@ -99,7 +101,7 @@ public class SocketServer extends Thread{
             }
         }
     }
-    
+
     public int getServerPort() {
         return server.getLocalPort();
     }

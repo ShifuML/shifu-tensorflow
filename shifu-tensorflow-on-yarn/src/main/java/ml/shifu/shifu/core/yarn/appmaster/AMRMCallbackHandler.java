@@ -77,6 +77,8 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
 
     private ByteBuffer allTokens;
 
+    private int lastRunEpochs = -1;
+
     // resource folder on hdfs
     private Path appResourcesPath;
 
@@ -105,18 +107,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
         CommonUtils.addResource(new Path(this.appResourcesPath, Constants.JAR_LIB_ZIP), containerResources, hdfs,
                 LocalResourceType.ARCHIVE, Constants.JAR_LIB_ROOT);
 
-        // // add self jar that container needed from hdfs to resource map
-        // try {
-        // String localAppJarPath = globalConf.get(GlobalConfigurationKeys.SHIFU_YARN_APP_JAR);
-        // CommonUtils.addResource(new Path(this.appResourcesPath, new File(localAppJarPath).getName()),
-        // containerResources,
-        // hdfs,
-        // LocalResourceType.FILE,
-        // new File(localAppJarPath).getName());
-        // } catch (Exception e) {
-        // LOG.error("Error getting local app jar path.", e);
-        // }
-
         getAllTokens();
     }
 
@@ -141,7 +131,7 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
             TensorflowTask task = session.getTaskByContainerId(containerStatus.getContainerId());
             if(task != null) {
                 LOG.warn("container : [" + containerStatus.getContainerId() + "] isregister!" + task.isRegister());
-                if (!task.isRegister()) {
+                if(!task.isRegister()) {
                     LOG.warn("container : [" + containerStatus.getContainerId() + "] does not register!");
                     continue;
                 }
@@ -201,19 +191,17 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
 
             nmClientAsync.startContainerAsync(container, ctx);
         }
-        
+
         // if all task have container, it mean session will go to next stage which is register cluster
-        if (session.isAllTaskAssignedContainer()) {
+        if(session.isAllTaskAssignedContainer()) {
             session.setState(SessionState.REGESTERING_CLUSTER);
             session.setStartTimeOfRegisteringCluster(System.currentTimeMillis());
             LOG.info("Session goes to REGESTERING_CLUSTER");
         }
     }
 
-    /**
+    /*
      * Populate allTokens with the tokens received
-     * 
-     * @return
      */
     private void getAllTokens() {
         Credentials credentials;
@@ -243,8 +231,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
      * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onShutdownRequest()
      */
     public void onShutdownRequest() {
-        // TODO Auto-generated method stub
-
     }
 
     /*
@@ -253,8 +239,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
      * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onNodesUpdated(java.util.List)
      */
     public void onNodesUpdated(List<NodeReport> updatedNodes) {
-        // TODO Auto-generated method stub
-
     }
 
     /*
@@ -263,10 +247,25 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
      * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#getProgress()
      */
     public float getProgress() {
-        if(session.getGlobalEpoch().get() > session.getTotalEpochs()) {
-            return 1f;
+        if(lastRunEpochs == -1 && session.getGlobalEpoch().get() > 1) {
+            // first global epoch is not 1, continuous training to get last global epoch
+            this.lastRunEpochs = session.getGlobalEpoch().get();
         }
-        return (float) session.getGlobalEpoch().get() / session.getTotalEpochs();
+
+        if(lastRunEpochs == -1) {
+            if(session.getGlobalEpoch().get() > session.getTotalEpochs()) {
+                return 1f;
+            }
+            return (float) session.getGlobalEpoch().get() / session.getTotalEpochs();
+        } else {
+            if(session.getGlobalEpoch().get() > (this.lastRunEpochs - 1)) {
+                float progress = (float) (session.getGlobalEpoch().get() - this.lastRunEpochs + 1)
+                        / session.getTotalEpochs();
+                return progress > 1f ? 1f : progress;
+            } else {
+                return 0f;
+            }
+        }
     }
 
     /*
@@ -275,7 +274,7 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
      * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onError(java.lang.Throwable)
      */
     public void onError(Throwable e) {
-        LOG.info("Error: stop nmClientAsync" + e);
+        LOG.error("Error: stop nmClientAsync", e);
         nmClientAsync.stop();
     }
 }

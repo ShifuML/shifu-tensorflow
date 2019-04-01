@@ -34,21 +34,24 @@ public class TrainingIntermediateResult implements Serializable {
 
     private int currentEpochStep = 0;
     private int workerIndex = -1;
-    
+
     private double trainingError = -1.0d;
     private double validError = -1.0d;
-    
+
     private double currentEpochTime = 0; // seconds
 
-    public TrainingIntermediateResult() {}
-    
+    private double currentEpochValidTime = 0; // seconds
+
+    public TrainingIntermediateResult() {
+    }
+
     public TrainingIntermediateResult(byte[] result) throws IOException, ClassNotFoundException {
         ByteArrayInputStream in = new ByteArrayInputStream(result);
         ObjectInputStream is = new ObjectInputStream(in);
         TrainingIntermediateResult clone = (TrainingIntermediateResult) is.readObject();
         deepClone(clone);
     }
-    
+
     public int getCurrentEpochStep() {
         return currentEpochStep;
     }
@@ -95,21 +98,38 @@ public class TrainingIntermediateResult implements Serializable {
         os.writeObject(this);
         return out.toByteArray();
     }
-    
+
     public void deepClone(TrainingIntermediateResult clone) {
-        if (clone != null) {
+        if(clone != null) {
             this.setCurrentEpochStep(clone.currentEpochStep);
             this.setCurrentEpochTime(clone.currentEpochTime);
             this.setTrainingError(clone.trainingError);
             this.setValidError(clone.validError);
             this.setWorkerIndex(clone.workerIndex);
+            this.setCurrentEpochValidTime(clone.currentEpochValidTime);
         }
+    }
+
+    /**
+     * @return the currentEpochValidTime
+     */
+    public double getCurrentEpochValidTime() {
+        return currentEpochValidTime;
+    }
+
+    /**
+     * @param currentEpochValidTime
+     *            the currentEpochValidTime to set
+     */
+    public void setCurrentEpochValidTime(double currentEpochValidTime) {
+        this.currentEpochValidTime = currentEpochValidTime;
     }
 
     @Override
     public String toString() {
         return "TrainingIntermediateResult [currentEpochStep=" + currentEpochStep + ", workerIndex=" + workerIndex
                 + ", trainingError=" + trainingError + ", validError=" + validError + ", currentEpochTime="
-                + currentEpochTime + "]";
+                + currentEpochTime + ", currentEpochValidTime=" + currentEpochValidTime + "]";
     }
+
 }
