@@ -254,7 +254,7 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
                                 LOG.info("we are going to use ps task: " + psBackCursor + " to replace " + i);
                                 
                                 TensorflowTask replacement = 
-                                        session.getTaskFromBackupTasks(Constants.PS_JOB_NAME, Integer.toString(psBackCursor));
+                                        session.getTaskFromNormalTasks(Constants.PS_JOB_NAME, Integer.toString(psBackCursor));
                                 cluster.getPs()[i] = cluster.getPs()[psBackCursor];
                                 cluster.getPs()[psBackCursor] = null;
                                 
