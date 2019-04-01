@@ -45,7 +45,6 @@ public class Constants {
     public static final String WORKER_JOB_NAME = "worker";
     public static final String PS_JOB_NAME = "ps";
     
-    //public static final String SHIFU_TENSORFLOW_FOLDER = ".shifu_tensorflow";
     public static final String YARN_TMP = "tmp";
     public static final String SHIFU_TENSORFLOW_HDFS_DIR = "shifu_tensorflow";
     
@@ -92,6 +91,7 @@ public class Constants {
     /** we will wait six minute, after that, we will do as best we can **/
     public static final int TIMEOUT_WAITING_CLUSTER_REGISTER = 6 * 60 * 1000;
     public static final double MIN_WORKERS_START_TRAINING_THREASHOLD = 0.95;
+    public static final double MIN_PS_START_TRAINING_THREASHOLD = 0.95;
     
     public static final FileSystem hdfs = HDFSUtils.getFS();
     public static final Path getAppResourcePath(String appId) {
@@ -100,5 +100,10 @@ public class Constants {
     
     public static String getClientResourcesPath(String appId, String fileName) {
         return String.format("%s-%s", appId, fileName);
+    }
+    
+    public static String getProgressLogFile() {
+        return new Path(new Path(File.separator + YARN_TMP, SHIFU_TENSORFLOW_HDFS_DIR), 
+                String.format("%s.log", System.currentTimeMillis())).toString();
     }
 }

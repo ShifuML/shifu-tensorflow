@@ -120,11 +120,23 @@ public class TensorflowTaskExecutor implements Watcher {
                 if (this.isBackup) {
                     String[] fields = tensorflowCluster.split("worker")[1].split(",");
                     for (int i = 0; i < fields.length; i++) {
-                        if (fields[i].contains(CommonUtils.getCurrentHostIP())) {
+                        if (fields[i].contains(CommonUtils.getCurrentHostIP() + ":" + tensorflowPort)) {
                             if (Integer.valueOf(taskIndex) != i ) {
                                 LOG.info("change taskid from " + taskIndex + " to " + i);
                                 shellEnv.put("TASK_ID", Integer.toString(i));
                                 this.isBackup = false;
+                            }
+                            break;
+                        }
+                    }
+                // we use order in cluster as taskID for ps as well, because we will igore a few ps with slow starter
+                } else if (Constants.PS_JOB_NAME.equalsIgnoreCase(this.jobName)) {
+                    String[] fields = tensorflowCluster.split("worker")[0].split(",");
+                    for (int i = 0; i < fields.length; i++) {
+                        if (fields[i].contains(CommonUtils.getCurrentHostIP() + ":" + tensorflowPort)) {
+                            if (Integer.valueOf(taskIndex) != i ) {
+                                LOG.info("change taskid from " + taskIndex + " to " + i);
+                                shellEnv.put("TASK_ID", Integer.toString(i));
                             }
                             break;
                         }
@@ -194,8 +206,15 @@ public class TensorflowTaskExecutor implements Watcher {
                 GlobalConfigurationKeys.DEFAULT_WEIGHT_COLUMN_NUM)); // default is -1.
         shellEnv.put("TARGET_COLUMN_NUM", globalConf.get(GlobalConfigurationKeys.TARGET_COLUMN_NUM,
                 GlobalConfigurationKeys.DEFAULT_TARGET_COLUMN_NUM)); 
-        shellEnv.put("SELECTED_COLUMN_NUMS", globalConf.get(GlobalConfigurationKeys.SELECTED_COLUMN_NUMS,
-                GlobalConfigurationKeys.DEFAULT_SELECTED_COLUMN_NUMS)); 
+        if (StringUtils.isNotBlank(globalConf.get(GlobalConfigurationKeys.SELECTED_COLUMN_NUMS))) {
+            shellEnv.put("SELECTED_COLUMN_NUMS", globalConf.get(GlobalConfigurationKeys.SELECTED_COLUMN_NUMS,
+                    GlobalConfigurationKeys.DEFAULT_SELECTED_COLUMN_NUMS));  // default is -1
+        } else {
+            shellEnv.put("SELECTED_NUMERIC_COLUMN_NUMS", globalConf.get(GlobalConfigurationKeys.SELECTED_NUMERIC_COLUMN_NUMS,
+                    GlobalConfigurationKeys.DEFAULT_SELECTED_COLUMN_NUMS));  // default is -1
+            shellEnv.put("SELECTED_CATEGORY_COLUMN_NUMS", globalConf.get(GlobalConfigurationKeys.SELECTED_CATEGORY_COLUMN_NUMS,
+                    GlobalConfigurationKeys.DEFAULT_SELECTED_COLUMN_NUMS));  // default is -1
+        }
         
         shellEnv.put("TMP_MODEL_PATH", globalConf.get(GlobalConfigurationKeys.TMP_MODEL_PATH));
         shellEnv.put("FINAL_MODEL_PATH", globalConf.get(GlobalConfigurationKeys.FINAL_MODEL_PATH));
@@ -275,7 +294,7 @@ public class TensorflowTaskExecutor implements Watcher {
      * @throws InterruptedException
      * @throws IOException
      */
-    public void run() throws IOException, InterruptedException {    
+    public int run() throws IOException, InterruptedException {    
         shellEnv.put("TRAIN_SCRIPT_PATH", pythonScript);
 
         // This is for this is backup task and replace slow task
@@ -290,7 +309,7 @@ public class TensorflowTaskExecutor implements Watcher {
             tensorflowSocket.close();
         }
 
-        CommonUtils.executeShell(pythonShell, 0, shellEnv);
+        return CommonUtils.executeShell(pythonShell, 0, shellEnv);
     }
     
     public static void main(String[] args) throws Exception {
@@ -319,10 +338,10 @@ public class TensorflowTaskExecutor implements Watcher {
             executor.backupStartingLatch.await();
         }
 
-        executor.run();
+        int result = executor.run();
         
         LOG.info("current worker finish..");
-        System.exit(0);
+        System.exit(result);
     }
     
     public boolean isBackup() {

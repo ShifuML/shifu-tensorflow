@@ -23,9 +23,10 @@ import org.apache.hadoop.yarn.client.api.async.NMClientAsync;
 
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
 
+
 /**
+ * {@link AbstractApplicationMaster} Abstract App master to define workflow
  * @author webai
- *
  */
 public abstract class AbstractApplicationMaster {
     private static final Log LOG = LogFactory.getLog(AbstractApplicationMaster.class);

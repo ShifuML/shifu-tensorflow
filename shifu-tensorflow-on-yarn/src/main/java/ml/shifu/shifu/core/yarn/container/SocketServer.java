@@ -54,9 +54,10 @@ public class SocketServer extends Thread {
     }
 
     public void run() {
+        Socket client = null;
         while(true) {
             try {
-                Socket client = server.accept();
+                client = server.accept();
                 LOG.info("got connection on port " + getServerPort());
 
                 BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
@@ -98,6 +99,14 @@ public class SocketServer extends Thread {
                 LOG.error("Writing zookeeper has some problem", e);
             } catch (InterruptedException e) {
                 LOG.error("Writing zookeeper has some problem", e);
+            } finally {
+                if (client != null) {
+                    try {
+                        client.close();
+                    } catch (IOException e) {
+                        LOG.error("socket close fails", e);
+                    }
+                }
             }
         }
     }

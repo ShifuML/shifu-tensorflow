@@ -35,7 +35,6 @@ import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.client.api.async.AMRMClientAsync;
-import org.apache.hadoop.yarn.client.api.async.NMClientAsync;
 import org.apache.hadoop.yarn.client.api.async.impl.NMClientAsyncImpl;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.util.AbstractLivelinessMonitor;
@@ -51,8 +50,11 @@ import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
 import ml.shifu.shifu.util.HDFSUtils;
 
 /**
- * @author webai
- *
+ * {@link TensorflowApplicationMaster} is application master to launch ps and worker tasks.
+ * 
+ * <p>
+ * This app master is used to check and launch all tasks, not to run the master task of distributed training. Master
+ * task is run on another container.
  */
 public class TensorflowApplicationMaster extends AbstractApplicationMaster {
     private static final Log LOG = LogFactory.getLog(TensorflowApplicationMaster.class);
@@ -62,7 +64,6 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
     private int hbInterval;
     private int maxConsecutiveHBMiss;
     private volatile boolean taskHasMissesHB = false;
-    private Thread mainThread;
 
     /** Configuration **/
     private YarnConfiguration yarnConf = new YarnConfiguration();
@@ -76,11 +77,13 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
     private Map<String, String> containerEnv = new ConcurrentHashMap<String, String>();
     
     private int appTimeout;
-    private long workerTimeout;
     private ContainerId containerId;
     private String appIdString;
 
     private TensorflowApplicationMaster() {
+        // In order to improve performace of PS. https://blog.csdn.net/omnispace/article/details/79864973
+        yarnConf.set("yarn.nodemanager.admin-env", "");
+        
         hbMonitor = new AbstractLivelinessMonitor<TensorflowTask>("Tensorflow Task liveliness Monitor",
                 new MonotonicClock()) {
             @Override
@@ -124,7 +127,7 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
             LOG.info("Application Master completed successfully. Exiting");
             System.exit(0);
         } catch (Exception e) {
-            LOG.error("Fail to execute Tensorflow application master");
+            LOG.error("Fail to execute Tensorflow application master", e);
             System.exit(-1);
         }
     }
@@ -140,9 +143,6 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
             opts.addOption("container_env", true, "");
             CommandLine cliParser = new GnuParser().parse(opts, args);
             containerEnv.putAll(CommonUtils.parseKeyValue(cliParser.getOptionValues("container_env")));
-            
-            //TODO parsing columnconfig file to pick out selected column number
-            
         } catch (ParseException e) {
             throw new IllegalStateException("Parsing app master arguments fails", e); 
         }
@@ -156,8 +156,6 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
         globalConf.addResource(new Path(Constants.GLOBAL_FINAL_XML));
         appTimeout = globalConf.getInt(GlobalConfigurationKeys.APPLICATION_TIMEOUT,
                 GlobalConfigurationKeys.DEFAULT_APPLICATION_TIMEOUT);
-        workerTimeout = globalConf.getInt(GlobalConfigurationKeys.WORKER_TIMEOUT,
-                GlobalConfigurationKeys.DEFAULT_WORKER_TIMEOUT);
         hbInterval = globalConf.getInt(GlobalConfigurationKeys.TASK_HEARTBEAT_INTERVAL_MS,
                 GlobalConfigurationKeys.DEFAULT_TASK_HEARTBEAT_INTERVAL_MS);
         maxConsecutiveHBMiss = globalConf.getInt(GlobalConfigurationKeys.TASK_MAX_MISSED_HEARTBEATS,
@@ -165,12 +163,8 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
         
         hbMonitor.init(globalConf);
         session = new TensorflowSession(globalConf);
-        mainThread = Thread.currentThread();
     }
 
-    /* (non-Javadoc)
-     * @see ml.shifu.shifu.core.yarn.appmaster.AbstractApplicationMaster#registerRMCallbackHandler()
-     */
     @Override
     protected void registerRMCallbackHandler() {
         // Init AMRMClient
@@ -197,7 +191,7 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
         hbMonitor.start();
     }
     
-    /* (non-Javadoc)
+    /*
      * @see ml.shifu.shifu.core.yarn.appmaster.AbstractApplicationMaster#scheduleTask()
      */
     @Override
@@ -214,7 +208,8 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
     protected boolean monitor() {
         long expireTime = appTimeout == 0 ? Long.MAX_VALUE : System.currentTimeMillis() + appTimeout;
         while(true) {
-            if (session.getState() == SessionState.REGESTERING_CLUSTER) {
+            if (session.getState() == SessionState.STARTING_CONTAINER || 
+                    session.getState() == SessionState.REGESTERING_CLUSTER) {
                 // In order to prevent program waiting long time for one or two slow container starting,
                 // here we do some logic to ingore those small number of slow container and starting training with whatever we 
                 // have now.
@@ -232,33 +227,71 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
                 
                 // if all ps and 95% of workers are ready and waiting time over 10 minuetes, we will continue training and 
                 //  abandon those are not ready
-                if (isChiefWorkerReady &&
-                        readyPsCnt == totalPsCnt &&
+                if (session.getState() == SessionState.REGESTERING_CLUSTER &&
+                        isChiefWorkerReady &&
+                        readyPsCnt > totalPsCnt * Constants.MIN_PS_START_TRAINING_THREASHOLD &&
                         readyWorkerCnt > totalWorkerCnt * Constants.MIN_WORKERS_START_TRAINING_THREASHOLD &&
+                        (totalWorkerCnt - readyWorkerCnt) < session.getNumTotalBackupWorkerTask() && 
                         (System.currentTimeMillis() - session.getStartTimeOfRegisteringCluster()) > 
                             Constants.TIMEOUT_WAITING_CLUSTER_REGISTER) {
-                    LOG.warn("We wait cluster register too long time, we are going to ignore worker cnt: " + (totalWorkerCnt-readyWorkerCnt));
+                    LOG.warn("We wait cluster register too long time, "
+                            + "we are going to ignore worker cnt: " + (totalWorkerCnt-readyWorkerCnt) +
+                            " and ignore ps cnt: " + (totalPsCnt - readyPsCnt));
                     
                     // we use every worker cluster now, and start training. do not accept any other workers
                     session.setState(SessionState.TRAINING);
+                    TensorflowClusterSpec cluster = session.getTensorflowClusterSpec();
+                    
+                    // re-arrange PS to use back ps to replace ignoring one
+                    int psBackCursor = totalPsCnt - 1;
+                    for (int i = 0; i < psBackCursor; i++) {
+                        if (StringUtils.isBlank(cluster.getPs()[i])) {
+                            while(StringUtils.isBlank(cluster.getPs()[psBackCursor])) {
+                                psBackCursor -= 1;
+                            }
+                            
+                            if (psBackCursor > i) {
+                                LOG.info("we are going to use ps task: " + psBackCursor + " to replace " + i);
+                                
+                                TensorflowTask replacement = 
+                                        session.getTaskFromNormalTasks(Constants.PS_JOB_NAME, Integer.toString(psBackCursor));
+                                cluster.getPs()[i] = cluster.getPs()[psBackCursor];
+                                cluster.getPs()[psBackCursor] = null;
+                                
+                                TensorflowTask target = session.getTaskFromNormalTasks(Constants.PS_JOB_NAME, Integer.toString(i));
+                                session.getJobNameToTasks().get(Constants.PS_JOB_NAME)[i] = replacement;
+
+                                // remove replacement from backup list because it has new place already
+                                replacement.setArrayIndex(target.getArrayIndex());
+                                replacement.setTaskIndex(target.getTaskIndex());
+                                
+                                session.stopContainer(nmClientAsync, target.getContainer());
+                                
+                                psBackCursor -= 1;
+                            }
+                        }
+                    }
                     
                     // re-arrange tensorflowCluster and task list to make sure order of host is same with task id
-                    TensorflowClusterSpec cluster = session.getTensorflowClusterSpec();
-                    int backCursor = totalWorkerCnt - 1;
-                    for (int i = 0; i < backCursor; i++) {
+                    int workerBackCursor = totalWorkerCnt - 1;
+                    for (int i = 0; i < workerBackCursor; i++) {
+                        // TODO: if some worker fails, we need to use backup to replace it as well.
+                        // Because during starting, some container are not started yet, some containers have fails already.
+                        // so we need to deal with those registered failed workers
+                        
                         if (StringUtils.isBlank(cluster.getWorker()[i])) {
-                            while(StringUtils.isBlank(cluster.getWorker()[backCursor])) {
-                                backCursor -= 1;
+                            while(StringUtils.isBlank(cluster.getWorker()[workerBackCursor])) {
+                                workerBackCursor -= 1;
                             }
-                            if (backCursor > i) {
-                                LOG.info("we are going to use task: " + backCursor + " to replace " + i);
+                            if (workerBackCursor > i) {
+                                LOG.info("we are going to use worker task: " + workerBackCursor + " to replace " + i);
                                 
                                 // use back end one to replace front missing one, backup definetly be backup worker
                                 // Otherwise it means all backup worker are dead which does not happened
                                 TensorflowTask replacement = 
-                                        session.getTaskFromBackupTasks(Constants.WORKER_JOB_NAME, Integer.toString(backCursor));
-                                cluster.getWorker()[i] = cluster.getWorker()[backCursor];
-                                cluster.getWorker()[backCursor] = null;
+                                        session.getTaskFromBackupTasks(Constants.WORKER_JOB_NAME, Integer.toString(workerBackCursor));
+                                cluster.getWorker()[i] = cluster.getWorker()[workerBackCursor];
+                                cluster.getWorker()[workerBackCursor] = null;
                                 
                                 TensorflowTask target = null;
                                 if (i+1 > session.getNumTotalWorkerTasks()) {
@@ -283,7 +316,7 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
                                 
                                 session.stopContainer(nmClientAsync, target.getContainer());
                                 
-                                backCursor -= 1;
+                                workerBackCursor -= 1;
                             }
                         }
                     }
@@ -291,6 +324,7 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
                     // re-arrange array of cluster to remove null element
                     session.getJobNameToBackupTaskNum().put(Constants.WORKER_JOB_NAME, readyWorkerCnt-session.getNumTotalWorkerTasks());
                     cluster.setWorker(Arrays.copyOfRange(cluster.getWorker(), 0, readyWorkerCnt));
+                    cluster.setPs(Arrays.copyOfRange(cluster.getPs(), 0, readyPsCnt));
                     
                     LOG.info("Left Backup worker : " + (readyWorkerCnt-session.getNumTotalWorkerTasks()));
                     
@@ -303,7 +337,7 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
                     }
                 }
                 
-                if ((System.currentTimeMillis() - session.getStartTimeOfRegisteringCluster()) > 10 * 60 * 1000) {
+                if ((System.currentTimeMillis() - session.getStartTimeOfRegisteringCluster()) > (20 * 60 * 1000)) {
                     LOG.error("Wait too long for registering cluster. Please restart training....");
                     return true;
                 }
@@ -341,23 +375,6 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
                 return true;
             }
             
-            // we are not going to use this condition to judge training finish or not
-            //  because when chief worker finish, training would be finished. 
-            //  after then, the other worker will not change model anymore
-            /** TODO, remove
-            if (session.getNumCompletedWorkerTasks().get() == this.session.getNumTotalWorkerTasks()) {
-                // success
-                CommonUtils.printWorkerTasksCompleted(this.session.getNumCompletedWorkerTasks(),
-                        this.session.getNumTotalWorkerTasks());
-                return true;
-            }
-
-            // Reduce logging frequency to every 100s.
-            if(counter % 20 == 1) {
-                CommonUtils.printWorkerTasksCompleted(this.session.getNumCompletedWorkerTasks(),
-                        this.session.getNumTotalWorkerTasks());
-            }
-             **/
             // Pause before refresh job status
             try {
                 Thread.sleep(5000);

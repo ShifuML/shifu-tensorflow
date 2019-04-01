@@ -56,6 +56,8 @@ import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
 import ml.shifu.shifu.util.HDFSUtils;
 
 /**
+ * {@link AMRMCallbackHandler} 
+ * 
  * @author webai
  *
  */
@@ -110,12 +112,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
         getAllTokens();
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onContainersCompleted(java.util.List)
-     */
     public void onContainersCompleted(List<ContainerStatus> completedContainers) {
         LOG.info("Completed containers: " + completedContainers.size());
         for(ContainerStatus containerStatus: completedContainers) {
@@ -149,12 +145,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
         }
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onContainersAllocated(java.util.List)
-     */
     public void onContainersAllocated(List<Container> containers) {
         LOG.info("Allocated: " + containers.size() + " containers.");
         for(Container container: containers) {
@@ -225,27 +215,12 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
         }
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onShutdownRequest()
-     */
     public void onShutdownRequest() {
     }
-
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onNodesUpdated(java.util.List)
-     */
+    
     public void onNodesUpdated(List<NodeReport> updatedNodes) {
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#getProgress()
-     */
     public float getProgress() {
         if(lastRunEpochs == -1 && session.getGlobalEpoch().get() > 1) {
             // first global epoch is not 1, continuous training to get last global epoch
@@ -268,11 +243,6 @@ public class AMRMCallbackHandler implements AMRMClientAsync.CallbackHandler {
         }
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.apache.hadoop.yarn.client.api.async.AMRMClientAsync.CallbackHandler#onError(java.lang.Throwable)
-     */
     public void onError(Throwable e) {
         LOG.error("Error: stop nmClientAsync", e);
         nmClientAsync.stop();

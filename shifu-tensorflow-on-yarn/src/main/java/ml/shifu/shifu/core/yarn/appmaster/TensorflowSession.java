@@ -55,6 +55,7 @@ import ml.shifu.guagua.coordinator.zk.GuaguaZooKeeper;
 import ml.shifu.guagua.coordinator.zk.ZooKeeperUtils;
 import ml.shifu.shifu.core.TrainingIntermediateResult;
 import ml.shifu.shifu.core.yarn.util.CommonUtils;
+import ml.shifu.shifu.core.yarn.util.CommonUtils.ClientConsoleBoard;
 import ml.shifu.shifu.core.yarn.util.Constants;
 import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
 
@@ -119,8 +120,11 @@ public class TensorflowSession implements Watcher {
     // Record session state for monitoring
     private SessionState state;
 
-    private long startTimeOfRegisteringCluster;
+    private long startTimeOfRegisteringCluster = Long.MAX_VALUE;
 
+    // hdfs log to store error so that client could read
+    private ClientConsoleBoard clientConsoleBoard;
+    
     public TensorflowSession() {
         setState(SessionState.INIT);
     }
@@ -136,7 +140,7 @@ public class TensorflowSession implements Watcher {
         if(zookeeperServer == null) {
             zookeeperServerHostPort = startZookeeperServer();
             try {
-                zookeeperServer = new GuaguaZooKeeper(zookeeperServerHostPort, 3000000, 5, 1000, this);
+                zookeeperServer = new GuaguaZooKeeper(zookeeperServerHostPort, Integer.MAX_VALUE, 5, 1000, this);
             } catch (IOException e) {
                 LOG.error("create zookeeper server fails!", e);
                 throw new RuntimeException(e);
@@ -172,6 +176,8 @@ public class TensorflowSession implements Watcher {
             LOG.error("Splitting training data fails or count file line fails!", e);
             throw new RuntimeException(e);
         }
+        
+        clientConsoleBoard =new ClientConsoleBoard(globalConf);
     }
 
     private static String startZookeeperServer() {
@@ -398,23 +404,6 @@ public class TensorflowSession implements Watcher {
         } else {
             setFinalStatus(FinalApplicationStatus.FAILED, "Chief worker failed");
         }
-
-        /**
-         * int failedWorkerNum = getFailedTasksNum(jobNameToTasks.get(Constants.WORKER_JOB_NAME));
-         * int failedPsNum = getFailedTasksNum(jobNameToTasks.get(Constants.PS_JOB_NAME));
-         * 
-         * if(failedPsNum > 0) {
-         * setFinalStatus(FinalApplicationStatus.FAILED, "There are some PS fails, they are: " + failedPs.toString());
-         * } else if(failedWorkerNum >= failedWorkerMaxLimit()) {
-         * setFinalStatus(FinalApplicationStatus.FAILED,
-         * "More than threshold of worker failed, failedCnt=" + failedWorkerNum);
-         * } else if(!chiefWorkerSuccess) {
-         * setFinalStatus(FinalApplicationStatus.FAILED, "Chief worker failed");
-         * } else {
-         * LOG.info("Session completed with no job failures, setting final status SUCCEEDED.");
-         * setFinalStatus(FinalApplicationStatus.SUCCEEDED, null);
-         * }
-         **/
     }
 
     /**
@@ -536,7 +525,7 @@ public class TensorflowSession implements Watcher {
                 + " valid error: " + (validErrorSum / count) + " training avg time: " + (trainingTimeSum / count)
                 + " valid avg time: " + (validTimeSum / count));
     }
-
+    
     public void process(WatchedEvent event) {
         if(event == null || StringUtils.isBlank(event.getPath())) {
             return;
@@ -688,6 +677,10 @@ public class TensorflowSession implements Watcher {
             return ps;
         }
 
+        public void setPs(String[] ps) {
+            this.ps = ps;
+        }
+        
         public String[] getWorker() {
             return worker;
         }
