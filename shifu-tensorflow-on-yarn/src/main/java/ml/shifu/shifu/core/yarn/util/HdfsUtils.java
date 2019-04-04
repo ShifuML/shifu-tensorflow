@@ -61,6 +61,11 @@ public class HdfsUtils {
      * expansion marker ('%' for Windows and '$' for Linux) by NodeManager on
      * container launch. For example: {{VAR}} will be replaced as $VAR on Linux,
      * and %VAR% on Windows.
+     * 
+     * @param variable 
+     *          which we want to add into classpath
+     *          
+     * @return classpath string
      */
     public static String $$(String variable) {
       return PARAMETER_EXPANSION_LEFT + variable + PARAMETER_EXPANSION_RIGHT;
@@ -134,7 +139,6 @@ public class HdfsUtils {
      *        File paths in hdfs
      * @return
      *        total line number of all these files.
-     * @throws IOException 
      */
     public static long getFileLineCount(FileSystem fs, String paths) throws IOException {
         //TODO We could get line count from column config

@@ -742,11 +742,6 @@ public class TensorflowSession implements Watcher {
 
     /**
      * Weak up backup worker with giving training data
-     * 
-     * @param backupWorkerTask
-     * @param trainingDataPath
-     * @throws InterruptedException
-     * @throws KeeperException
      */
     public void weakupBackup(TensorflowTask backupWorkerTask, String trainingDataPath) {
         if(StringUtils.isBlank(trainingDataPath)) {

@@ -207,7 +207,6 @@ public class TensorflowClient implements AutoCloseable {
      * @param args
      *            Parsed command line options
      * @return Whether the init was successful to run the client
-     * @throws org.apache.commons.cli.ParseException
      */
     public boolean init(String[] args) throws Exception {
         globalConf.addResource(Constants.GLOBAL_DEFAULT_XML);
@@ -314,9 +313,6 @@ public class TensorflowClient implements AutoCloseable {
         }
     }
 
-    /**
-     * @return
-     */
     public int start() {
         boolean result;
         try {
@@ -333,12 +329,6 @@ public class TensorflowClient implements AutoCloseable {
         return -1;
     }
 
-    /**
-     * @return
-     * @throws IOException
-     * @throws YarnException
-     * @throws InterruptedException
-     */
     public boolean run() throws YarnException, IOException, InterruptedException {
         LOG.info("Starting client..");
         LOG.info("Hadoop env: " + System.getenv(Constants.HADOOP_CONF_DIR));

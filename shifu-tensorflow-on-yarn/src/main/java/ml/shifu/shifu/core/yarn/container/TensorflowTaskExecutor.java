@@ -288,12 +288,7 @@ public class TensorflowTaskExecutor implements Watcher {
         
         return backupProcess.exitValue();
     }
-    /**
-     * 
-     * @param env
-     * @throws InterruptedException
-     * @throws IOException
-     */
+
     public int run() throws IOException, InterruptedException {    
         shellEnv.put("TRAIN_SCRIPT_PATH", pythonScript);
 

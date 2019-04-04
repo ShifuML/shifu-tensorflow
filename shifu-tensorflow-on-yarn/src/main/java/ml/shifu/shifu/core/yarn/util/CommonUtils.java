@@ -139,6 +139,8 @@ public class CommonUtils {
      * 
      * @param path
      *            the directory whose contents will be localized.
+     * @param resourcesMap
+     *            Local resource map
      * @param fs
      *            the configuration file for HDFS.
      */
@@ -230,8 +232,6 @@ public class CommonUtils {
      * @param env
      *            the environment for this shell command
      * @return the exit code of the shell command
-     * @throws IOException
-     * @throws InterruptedException
      */
     public static int executeShell(String taskCommand, long timeout, Map<String, String> env)
             throws IOException, InterruptedException {
@@ -293,9 +293,8 @@ public class CommonUtils {
     /**
      * This method only support kill process in Linux
      * 
-     * @param port
-     * @throws IOException
-     * @throws InterruptedException
+     * @param port 
+     *            the port which process is using
      */
     public static void killProcessByPort(String port) throws IOException, InterruptedException {
         String[] cmd = { "/bin/bash", "-c", "kill -9 $(lsof -i:" +  port + "| grep LISTEN | awk '{print $2}')" };
