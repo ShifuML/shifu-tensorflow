@@ -27,6 +27,7 @@ import org.encog.ml.data.MLData;
 import org.encog.ml.data.basic.BasicMLData;
 import org.junit.Test;
 
+import junit.framework.Assert;
 import ml.shifu.shifu.container.obj.GenericModelConfig;
 
 public class TensorflowModelTest {
@@ -55,6 +56,6 @@ public class TensorflowModelTest {
         TensorflowModel tm = new TensorflowModel();
         tm.init(config);
         double result = tm.compute(input);
-        System.out.println(result);
+        Assert.assertTrue(result >= 0 && result <= 1);
     }
 }
