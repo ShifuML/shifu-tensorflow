@@ -129,7 +129,8 @@ public class CommonUtils {
             throw new RuntimeException("Memory Conf missing unit:" + memory);
         }
        
-        // adjust memory size to make it available to mini memory requirement
+        // RM only allocated Integer multiple of the minimum memory
+        // So we need to adjust input memory. Otherwise, memory RM gives will not match what we request
         long mod = memoryInMB % miniAllocatedMem;
         if (mod != 0) {
             memoryInMB = memoryInMB + (miniAllocatedMem - mod);
