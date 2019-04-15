@@ -115,17 +115,27 @@ public class CommonUtils {
         return keyValue;
     }
 
-    public static String parseMemoryString(String memory) {
+    public static String parseMemoryString(String memory, int miniAllocatedMem) {
         memory = memory.toLowerCase();
         int m = memory.indexOf('m');
         int g = memory.indexOf('g');
-        if(-1 != m) {
-            return memory.substring(0, m);
+        long memoryInMB = -1;
+
+        if (g != -1) {
+            memoryInMB = Integer.parseInt(memory.substring(0, g)) * 1024;
+        } else if (m != -1) {
+            memoryInMB = Integer.parseInt(memory.substring(0, m));
+        } else {
+            throw new RuntimeException("Memory Conf missing unit:" + memory);
         }
-        if(-1 != g) {
-            return String.valueOf(Integer.parseInt(memory.substring(0, g)) * 1024);
+       
+        // adjust memory size to make it available to mini memory requirement
+        long mod = memoryInMB % miniAllocatedMem;
+        if (mod != 0) {
+            memoryInMB = memoryInMB + (miniAllocatedMem - mod);
         }
-        return memory;
+        
+        return String.valueOf(memoryInMB);
     }
 
     public static void printTHSUrl(String thsHost, String appId, Log log) {
@@ -318,13 +328,15 @@ public class CommonUtils {
      * 
      * @param conf
      *            the global configuration.
+     * @param yarnConf
+     *            the conf of yarn, we use this to adjust memory size
      * @return map from configured job name to its corresponding resource request
      */
-    public static Map<String, TensorFlowContainerRequest> parseContainerRequests(Configuration conf) {
+    public static Map<String, TensorFlowContainerRequest> parseContainerRequests(Configuration conf, 
+            YarnConfiguration yarnConf) {
         List<String> jobNames = new ArrayList<String>();
         jobNames.add("ps");
         jobNames.add("worker");
-
         Map<String, TensorFlowContainerRequest> containerRequests = new HashMap<String, TensorFlowContainerRequest>();
         int priority = 0;
         for(String jobName: jobNames) {
@@ -332,7 +344,8 @@ public class CommonUtils {
                     GlobalConfigurationKeys.getDefaultInstances(jobName));
             String memoryString = conf.get(GlobalConfigurationKeys.getMemoryKey(jobName),
                     GlobalConfigurationKeys.DEFAULT_MEMORY);
-            long memory = Long.parseLong(parseMemoryString(memoryString));
+            long memory = Long.parseLong(parseMemoryString(memoryString, 
+                    yarnConf.getInt("yarn.scheduler.minimum-allocation-mb", 1024)));
             int vCores = conf.getInt(GlobalConfigurationKeys.getVCoresKey(jobName),
                     GlobalConfigurationKeys.DEFAULT_VCORES);
             // used for fault tolerance

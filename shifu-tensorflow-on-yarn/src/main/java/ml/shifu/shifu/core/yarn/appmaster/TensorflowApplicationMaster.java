@@ -162,7 +162,7 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
                 GlobalConfigurationKeys.DEFAULT_TASK_MAX_MISSED_HEARTBEATS);
         
         hbMonitor.init(globalConf);
-        session = new TensorflowSession(globalConf);
+        session = new TensorflowSession(globalConf, yarnConf);
     }
 
     @Override

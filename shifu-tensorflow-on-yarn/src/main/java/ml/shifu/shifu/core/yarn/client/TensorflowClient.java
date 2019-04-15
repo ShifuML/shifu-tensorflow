@@ -237,7 +237,8 @@ public class TensorflowClient implements AutoCloseable {
 
         String amMemoryString = globalConf.get(GlobalConfigurationKeys.AM_MEMORY,
                 GlobalConfigurationKeys.DEFAULT_AM_MEMORY);
-        amMemory = Integer.parseInt(CommonUtils.parseMemoryString(amMemoryString));
+        amMemory = Integer.parseInt(CommonUtils.parseMemoryString(amMemoryString, 
+                yarnConf.getInt("yarn.scheduler.minimum-allocation-mb", 1024)));
         amVCores = globalConf.getInt(GlobalConfigurationKeys.AM_VCORES, GlobalConfigurationKeys.DEFAULT_AM_VCORES);
         hbInterval = globalConf.getInt(GlobalConfigurationKeys.TASK_HEARTBEAT_INTERVAL_MS,
                 GlobalConfigurationKeys.DEFAULT_TASK_HEARTBEAT_INTERVAL_MS);

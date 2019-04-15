@@ -40,6 +40,7 @@ import org.apache.hadoop.yarn.client.api.AMRMClient;
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest;
 import org.apache.hadoop.yarn.client.api.async.AMRMClientAsync;
 import org.apache.hadoop.yarn.client.api.async.NMClientAsync;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
@@ -68,7 +69,8 @@ import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
 public class TensorflowSession implements Watcher {
     private static final Log LOG = LogFactory.getLog(TensorflowSession.class);
     private Configuration globalConf;
-
+    private YarnConfiguration yarnConf;
+    
     private Map<String, TensorFlowContainerRequest> containerRequests;
     private Map<String, List<ContainerRequest>> jobNameToContainerRequests = new HashMap<String, List<ContainerRequest>>();
     private Map<String, TensorflowTask> containerIdToTask = new HashMap<String, TensorflowTask>();
@@ -129,10 +131,11 @@ public class TensorflowSession implements Watcher {
         setState(SessionState.INIT);
     }
 
-    public TensorflowSession(Configuration globalConf) {
+    public TensorflowSession(Configuration globalConf, YarnConfiguration yarnConf) {
         this.globalConf = globalConf;
+        this.yarnConf = yarnConf;
         this.totalEpochs = this.globalConf.getInt(GlobalConfigurationKeys.SHIFU_APPLICATION_EPOCHS, -1);
-        this.containerRequests = CommonUtils.parseContainerRequests(this.globalConf);
+        this.containerRequests = CommonUtils.parseContainerRequests(this.globalConf, this.yarnConf);
         setState(SessionState.INIT);
 
         // create zookeeper server for sync tensorflow cluster spec
