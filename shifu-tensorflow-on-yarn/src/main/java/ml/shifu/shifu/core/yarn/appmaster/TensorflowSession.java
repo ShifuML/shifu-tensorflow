@@ -18,6 +18,8 @@ package ml.shifu.shifu.core.yarn.appmaster;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -70,7 +72,7 @@ public class TensorflowSession implements Watcher {
     private static final Log LOG = LogFactory.getLog(TensorflowSession.class);
     private Configuration globalConf;
     private YarnConfiguration yarnConf;
-    
+
     private Map<String, TensorFlowContainerRequest> containerRequests;
     private Map<String, List<ContainerRequest>> jobNameToContainerRequests = new HashMap<String, List<ContainerRequest>>();
     private Map<String, TensorflowTask> containerIdToTask = new HashMap<String, TensorflowTask>();
@@ -126,7 +128,7 @@ public class TensorflowSession implements Watcher {
 
     // hdfs log to store error so that client could read
     private ClientConsoleBoard clientConsoleBoard;
-    
+
     public TensorflowSession() {
         setState(SessionState.INIT);
     }
@@ -179,8 +181,8 @@ public class TensorflowSession implements Watcher {
             LOG.error("Splitting training data fails or count file line fails!", e);
             throw new RuntimeException(e);
         }
-        
-        clientConsoleBoard =new ClientConsoleBoard(globalConf);
+
+        clientConsoleBoard = new ClientConsoleBoard(globalConf);
     }
 
     private static String startZookeeperServer() {
@@ -517,8 +519,11 @@ public class TensorflowSession implements Watcher {
         double trainingTimeSum = 0.0d;
         double validTimeSum = 0.0d;
 
-        for(Entry<String, TrainingIntermediateResult> entrySet: intermediateResults.entrySet()) {
-            TrainingIntermediateResult tir = entrySet.getValue();
+        List<TrainingIntermediateResult> workerStats = new ArrayList<>();
+        for(Entry<String, TrainingIntermediateResult> entry: intermediateResults.entrySet()) {
+            TrainingIntermediateResult tir = entry.getValue();
+            tir.setContainerId(entry.getKey());
+            workerStats.add(tir);
             trainingErrorSum += tir.getTrainingError();
             validErrorSum += tir.getValidError();
             trainingTimeSum += tir.getCurrentEpochTime();
@@ -527,12 +532,22 @@ public class TensorflowSession implements Watcher {
         String message = "Epoch: " + getGlobalEpoch().get() + " training error: " + (trainingErrorSum / count)
                 + " valid error: " + (validErrorSum / count) + " training avg time: " + (trainingTimeSum / count)
                 + " valid avg time: " + (validTimeSum / count);
-        
+
         LOG.info(message);
-        
+
+        Collections.sort(workerStats, new Comparator<TrainingIntermediateResult>() {
+            @Override
+            public int compare(TrainingIntermediateResult o1, TrainingIntermediateResult o2) {
+                return o1.getCurrentEpochTime() < o2.getCurrentEpochTime() ? 1
+                        : (o1.getCurrentEpochTime() == o2.getCurrentEpochTime() ? 0 : -1);
+            }
+        });
+
+        LOG.info("Worker messages: " + workerStats.toString());
+
         clientConsoleBoard.showOnBoard(message);
     }
-    
+
     public void process(WatchedEvent event) {
         if(event == null || StringUtils.isBlank(event.getPath())) {
             return;
@@ -687,7 +702,7 @@ public class TensorflowSession implements Watcher {
         public void setPs(String[] ps) {
             this.ps = ps;
         }
-        
+
         public String[] getWorker() {
             return worker;
         }

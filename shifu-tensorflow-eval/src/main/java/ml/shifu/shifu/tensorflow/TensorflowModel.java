@@ -15,19 +15,19 @@
  */
 package ml.shifu.shifu.tensorflow;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.encog.ml.data.MLData;
-import ml.shifu.shifu.core.Computable;
-import scala.collection.mutable.ArrayBuilder.ofBoolean;
-import ml.shifu.shifu.container.obj.GenericModelConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tensorflow.SavedModelBundle;
 import org.tensorflow.Session;
 import org.tensorflow.Tensor;
 
-import java.util.Map;
-import java.util.HashMap;
-import java.util.List;
+import ml.shifu.shifu.container.obj.GenericModelConfig;
+import ml.shifu.shifu.core.Computable;
 
 public class TensorflowModel implements Computable {
 
@@ -51,7 +51,6 @@ public class TensorflowModel implements Computable {
 
     @Override
     public double compute(MLData input) {
-        LOG.error("tensorflow compute start.");
         double result = Double.MIN_VALUE;
         if(initiate && smb != null) {
             Session.Runner runner = smb.session().runner();
@@ -76,7 +75,6 @@ public class TensorflowModel implements Computable {
             Tensor<?> output = runner.run().get(0);
             result = ((float[][]) output.copyTo(new float[1][1]))[0][0];
         }
-        LOG.error("return result {}", result);
         return result;
     }
 

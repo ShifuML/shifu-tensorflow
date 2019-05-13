@@ -42,6 +42,8 @@ public class TrainingIntermediateResult implements Serializable {
 
     private double currentEpochValidTime = 0; // seconds
 
+    private String containerId;
+
     public TrainingIntermediateResult() {
     }
 
@@ -107,6 +109,7 @@ public class TrainingIntermediateResult implements Serializable {
             this.setValidError(clone.validError);
             this.setWorkerIndex(clone.workerIndex);
             this.setCurrentEpochValidTime(clone.currentEpochValidTime);
+            this.setContainerId(clone.containerId);
         }
     }
 
@@ -115,6 +118,21 @@ public class TrainingIntermediateResult implements Serializable {
      */
     public double getCurrentEpochValidTime() {
         return currentEpochValidTime;
+    }
+
+    /**
+     * @return the containerId
+     */
+    public String getContainerId() {
+        return containerId;
+    }
+
+    /**
+     * @param containerId
+     *            the containerId to set
+     */
+    public void setContainerId(String containerId) {
+        this.containerId = containerId;
     }
 
     /**
@@ -129,7 +147,8 @@ public class TrainingIntermediateResult implements Serializable {
     public String toString() {
         return "TrainingIntermediateResult [currentEpochStep=" + currentEpochStep + ", workerIndex=" + workerIndex
                 + ", trainingError=" + trainingError + ", validError=" + validError + ", currentEpochTime="
-                + currentEpochTime + ", currentEpochValidTime=" + currentEpochValidTime + "]";
+                + currentEpochTime + ", currentEpochValidTime=" + currentEpochValidTime + ", containerId=" + containerId
+                + "]";
     }
 
 }
