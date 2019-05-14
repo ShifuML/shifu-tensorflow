@@ -53,50 +53,59 @@ public class TensorflowModel implements Computable {
     public double compute(MLData input) {
         double result = Double.MIN_VALUE;
         if(!initiate || smb == null) {
-
-        }
-        Session.Runner runner = smb.session().runner();
-        double[] inputDArr = input.getData();
-        float[] inputFArr = new float[inputDArr.length];
-        for(int i = 0; i < inputDArr.length; i++) {
-            inputFArr[i] = (float) inputDArr[i];
+            throw new IllegalStateException("TF model not initialized.");
         }
 
-        Tensor<?> inputTensor = Tensor.create(new float[][] { inputFArr });
-        runner.feed(inputNames[0], inputTensor);
+        Tensor<?>[] propertyTensors = null;
+        List<Tensor<?>> results = null;
 
-        @SuppressWarnings("rawtypes")
-        Tensor[] propertyTensors = new Tensor[inputNames.length];
-        propertyTensors[0] = inputTensor;
-        for(int i = 1; i < inputNames.length; i++) {
-            try {
-                propertyTensors[i] = Tensor.create(properties.get(inputNames[i]));
-                runner.feed(inputNames[i], propertyTensors[i]);
-            } catch (Exception e) {
-                LOG.error("Invalid input, {}", e);
+        try {
+            Session.Runner runner = smb.session().runner();
+            double[] inputDArr = input.getData();
+            float[] inputFArr = new float[inputDArr.length];
+            for(int i = 0; i < inputDArr.length; i++) {
+                inputFArr[i] = (float) inputDArr[i];
             }
 
+            Tensor<?> inputTensor = Tensor.create(new float[][] { inputFArr });
+            runner.feed(inputNames[0], inputTensor);
+
+            propertyTensors = new Tensor[inputNames.length];
+            propertyTensors[0] = inputTensor;
+            for(int i = 1; i < inputNames.length; i++) {
+                try {
+                    propertyTensors[i] = Tensor.create(properties.get(inputNames[i]));
+                    runner.feed(inputNames[i], propertyTensors[i]);
+                } catch (Exception e) {
+                    LOG.error("Invalid input, {}", e);
+                }
+
+            }
+
+            runner.fetch(outputNames);
+            results = runner.run();
+            Tensor<?> output = results.get(0);
+            result = ((float[][]) output.copyTo(new float[1][1]))[0][0];
+        } finally {
+            closeTensors(propertyTensors, results);
         }
 
-        runner.fetch(outputNames);
+        return result;
+    }
 
-        List<Tensor<?>> results = runner.run();
-        Tensor<?> output = results.get(0);
-        result = ((float[][]) output.copyTo(new float[1][1]))[0][0];
-
+    @SuppressWarnings("rawtypes")
+    private void closeTensors(Tensor[] propertyTensors, List<Tensor<?>> results) {
         for(Tensor<?> tensor: propertyTensors) {
             if(tensor != null) {
                 tensor.close();
             }
         }
-        
+
         for(Tensor<?> tensor: results) {
             if(tensor != null) {
                 tensor.close();
             }
         }
-        
-        return result;
     }
 
     @Override
