@@ -52,29 +52,50 @@ public class TensorflowModel implements Computable {
     @Override
     public double compute(MLData input) {
         double result = Double.MIN_VALUE;
-        if(initiate && smb != null) {
-            Session.Runner runner = smb.session().runner();
-            double[] inputDArr = input.getData();
-            float[] inputFArr = new float[inputDArr.length];
-            for(int i = 0; i < inputDArr.length; i++) {
-                inputFArr[i] = (float) inputDArr[i];
-            }
+        if(!initiate || smb == null) {
 
-            runner.feed(inputNames[0], Tensor.create(new float[][] { inputFArr }));
-
-            for(int i = 1; i < inputNames.length; i++) {
-                try {
-                    runner.feed(inputNames[i], Tensor.create(properties.get(inputNames[i])));
-                } catch (Exception e) {
-                    LOG.error("Invalid input, {}", e);
-                }
-            }
-
-            runner.fetch(outputNames);
-
-            Tensor<?> output = runner.run().get(0);
-            result = ((float[][]) output.copyTo(new float[1][1]))[0][0];
         }
+        Session.Runner runner = smb.session().runner();
+        double[] inputDArr = input.getData();
+        float[] inputFArr = new float[inputDArr.length];
+        for(int i = 0; i < inputDArr.length; i++) {
+            inputFArr[i] = (float) inputDArr[i];
+        }
+
+        Tensor<?> inputTensor = Tensor.create(new float[][] { inputFArr });
+        runner.feed(inputNames[0], inputTensor);
+
+        @SuppressWarnings("rawtypes")
+        Tensor[] propertyTensors = new Tensor[inputNames.length];
+        propertyTensors[0] = inputTensor;
+        for(int i = 1; i < inputNames.length; i++) {
+            try {
+                propertyTensors[i] = Tensor.create(properties.get(inputNames[i]));
+                runner.feed(inputNames[i], propertyTensors[i]);
+            } catch (Exception e) {
+                LOG.error("Invalid input, {}", e);
+            }
+
+        }
+
+        runner.fetch(outputNames);
+
+        List<Tensor<?>> results = runner.run();
+        Tensor<?> output = results.get(0);
+        result = ((float[][]) output.copyTo(new float[1][1]))[0][0];
+
+        for(Tensor<?> tensor: propertyTensors) {
+            if(tensor != null) {
+                tensor.close();
+            }
+        }
+        
+        for(Tensor<?> tensor: results) {
+            if(tensor != null) {
+                tensor.close();
+            }
+        }
+        
         return result;
     }
 
@@ -100,8 +121,8 @@ public class TensorflowModel implements Computable {
         Object outputNames = properties.get("outputnames");
         if(outputNames instanceof String) {
             this.outputNames = (String) properties.get("outputnames");
-        }  else if(outputNames instanceof String[]) {
-            String[] outputs = (String[])outputNames;
+        } else if(outputNames instanceof String[]) {
+            String[] outputs = (String[]) outputNames;
             if(outputs.length == 1) {
                 this.outputNames = outputs[0];
             } else {
