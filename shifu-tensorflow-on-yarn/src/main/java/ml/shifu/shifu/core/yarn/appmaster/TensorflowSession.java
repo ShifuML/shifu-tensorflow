@@ -530,8 +530,8 @@ public class TensorflowSession implements Watcher {
             validTimeSum += tir.getCurrentEpochValidTime();
         }
         String message = "Epoch: " + getGlobalEpoch().get() + " training error: " + (trainingErrorSum / count)
-                + " valid error: " + (validErrorSum / count) + " training avg time: " + (trainingTimeSum / count)
-                + " valid avg time: " + (validTimeSum / count);
+                + " valid error: " + (validErrorSum / count) + " avg training time: " + (trainingTimeSum / count)
+                + " avg valid time: " + (validTimeSum / count);
 
         LOG.info(message);
 
