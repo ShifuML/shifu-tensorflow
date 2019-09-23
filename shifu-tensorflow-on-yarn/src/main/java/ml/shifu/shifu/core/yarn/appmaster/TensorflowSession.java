@@ -711,11 +711,11 @@ public class TensorflowSession implements Watcher {
             this.worker = worker;
         }
 
-        public int _getReadyPsCnt() {
+        public int getReadyPsCnt() {
             return readyPsCnt;
         }
 
-        public int _getReadyWorkerCnt() {
+        public int getReadyWorkerCnt() {
             return readyWorkerCnt;
         }
 

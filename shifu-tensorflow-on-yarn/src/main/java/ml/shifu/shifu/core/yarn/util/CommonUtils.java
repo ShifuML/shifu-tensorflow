@@ -82,7 +82,7 @@ public class CommonUtils {
         // Container environment
         // examples for env set variables: --shell_env CLASSPATH=ABC --shell_ENV LD_LIBRARY_PATH=DEF
         opts.addOption("container_env", true, "Environment for the worker containers, specified as key=val pairs");
-        
+
         return opts;
     }
 
@@ -121,21 +121,21 @@ public class CommonUtils {
         int g = memory.indexOf('g');
         long memoryInMB = -1;
 
-        if (g != -1) {
+        if(g != -1) {
             memoryInMB = Integer.parseInt(memory.substring(0, g)) * 1024;
-        } else if (m != -1) {
+        } else if(m != -1) {
             memoryInMB = Integer.parseInt(memory.substring(0, m));
         } else {
             throw new RuntimeException("Memory Conf missing unit:" + memory);
         }
-       
+
         // RM only allocated Integer multiple of the minimum memory
         // So we need to adjust input memory. Otherwise, memory RM gives will not match what we request
         long mod = memoryInMB % miniAllocatedMem;
-        if (mod != 0) {
+        if(mod != 0) {
             memoryInMB = memoryInMB + (miniAllocatedMem - mod);
         }
-        
+
         return String.valueOf(memoryInMB);
     }
 
@@ -216,15 +216,15 @@ public class CommonUtils {
     }
 
     public static String getCurrentHostName() {
-        //return System.getenv(ApplicationConstants.Environment.NM_HOST.name());
-        
+        // return System.getenv(ApplicationConstants.Environment.NM_HOST.name());
+
         try {
             return InetAddress.getLocalHost().getHostName();
         } catch (Exception e) {
             throw new GuaguaRuntimeException(e);
         }
     }
-    
+
     public static String getCurrentHostIP() {
         try {
             return InetAddress.getLocalHost().getHostAddress();
@@ -256,22 +256,22 @@ public class CommonUtils {
         ProcessBuilder taskProcessBuilder = new ProcessBuilder(taskCommand);
         taskProcessBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
         taskProcessBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-        
+
         if(env != null) {
             putAll(taskProcessBuilder.environment(), env);
         }
         Process taskProcess = taskProcessBuilder.start();
-        
-/**      For Testing   **/
-//        Integer taskId = Integer.valueOf(env.get("TASK_ID"));
-//        String jobName = env.get("JOB_NAME");
-//        if(timeout > 0 || (jobName.equals("ps") && taskId == 1)) {
-//            taskProcess.waitFor(80000, TimeUnit.MILLISECONDS);
-//            killProcessByPort("2181");
-//            
-//            taskProcess.destroyForcibly();
-//            taskProcess.destroy();
-        if (timeout > 0) {
+
+        /** For Testing **/
+        // Integer taskId = Integer.valueOf(env.get("TASK_ID"));
+        // String jobName = env.get("JOB_NAME");
+        // if(timeout > 0 || (jobName.equals("ps") && taskId == 1)) {
+        // taskProcess.waitFor(80000, TimeUnit.MILLISECONDS);
+        // killProcessByPort("2181");
+        //
+        // taskProcess.destroyForcibly();
+        // taskProcess.destroy();
+        if(timeout > 0) {
             taskProcess.wait(timeout);
         } else {
             taskProcess.waitFor();
@@ -280,8 +280,7 @@ public class CommonUtils {
         return taskProcess.exitValue();
     }
 
-    public static Process executeShellAndGetProcess(String taskCommand, 
-            Map<String, String> env)
+    public static Process executeShellAndGetProcess(String taskCommand, Map<String, String> env)
             throws IOException, InterruptedException {
         LOG.info("Executing command: " + taskCommand);
         String executablePath = taskCommand.trim().split(" ")[0];
@@ -293,35 +292,35 @@ public class CommonUtils {
         ProcessBuilder taskProcessBuilder = new ProcessBuilder(taskCommand);
         taskProcessBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
         taskProcessBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-        
+
         if(env != null) {
             putAll(taskProcessBuilder.environment(), env);
         }
         Process taskProcess = taskProcessBuilder.start();
         return taskProcess;
     }
-    
+
     /**
      * This method only support kill process in Linux
      * 
-     * @param port 
+     * @param port
      *            the port which process is using
      */
     public static void killProcessByPort(String port) throws IOException, InterruptedException {
-        String[] cmd = { "/bin/bash", "-c", "kill -9 $(lsof -i:" +  port + "| grep LISTEN | awk '{print $2}')" };
+        String[] cmd = { "/bin/bash", "-c", "kill -9 $(lsof -i:" + port + "| grep LISTEN | awk '{print $2}')" };
         Process p = Runtime.getRuntime().exec(cmd);
         p.waitFor();
     }
-    
+
     private static void putAll(Map<String, String> target, Map<String, String> newEnv) {
-        for (Entry<String, String> cur : newEnv.entrySet()) {
-            LOG.info(cur.getKey() + ":" + cur.getValue());
-            if (StringUtils.isNotBlank(cur.getKey()) && StringUtils.isNotBlank(cur.getValue())) {
+        for(Entry<String, String> cur: newEnv.entrySet()) {
+            LOG.info("Task Executor env: " + cur.getKey() + "=" + cur.getValue());
+            if(StringUtils.isNotBlank(cur.getKey()) && StringUtils.isNotBlank(cur.getValue())) {
                 target.put(cur.getKey(), cur.getValue());
             }
         }
     }
-    
+
     /**
      * Parses resource requests from configuration of the form "shifu.x(PS).y(memory)" where "x" is the
      * TensorFlow job name, and "y" is "instances" or the name of a resource type
@@ -333,7 +332,7 @@ public class CommonUtils {
      *            the conf of yarn, we use this to adjust memory size
      * @return map from configured job name to its corresponding resource request
      */
-    public static Map<String, TensorFlowContainerRequest> parseContainerRequests(Configuration conf, 
+    public static Map<String, TensorFlowContainerRequest> parseContainerRequests(Configuration conf,
             YarnConfiguration yarnConf) {
         List<String> jobNames = new ArrayList<String>();
         jobNames.add("ps");
@@ -345,15 +344,15 @@ public class CommonUtils {
                     GlobalConfigurationKeys.getDefaultInstances(jobName));
             String memoryString = conf.get(GlobalConfigurationKeys.getMemoryKey(jobName),
                     GlobalConfigurationKeys.DEFAULT_MEMORY);
-            long memory = Long.parseLong(parseMemoryString(memoryString, 
-                    yarnConf.getInt("yarn.scheduler.minimum-allocation-mb", 1024)));
+            long memory = Long.parseLong(
+                    parseMemoryString(memoryString, yarnConf.getInt("yarn.scheduler.minimum-allocation-mb", 1024)));
             int vCores = conf.getInt(GlobalConfigurationKeys.getVCoresKey(jobName),
                     GlobalConfigurationKeys.DEFAULT_VCORES);
             // used for fault tolerance
             // TODO: We do not support PS recover yet, so please do not config PS backup instances
             int numBackupInstances = conf.getInt(GlobalConfigurationKeys.getBackupInstancesKey(jobName),
                     GlobalConfigurationKeys.getDefaultBackupInstances(jobName));
-            
+
             /*
              * The priority of different task types MUST be different.
              * Otherwise the requests will overwrite each other on the RM
@@ -361,8 +360,8 @@ public class CommonUtils {
              * For now we set the priorities of different task types arbitrarily.
              */
             if(numInstances > 0) {
-                containerRequests.put(jobName,
-                        new TensorFlowContainerRequest(jobName, numInstances, memory, vCores, priority++, numBackupInstances));
+                containerRequests.put(jobName, new TensorFlowContainerRequest(jobName, numInstances, memory, vCores,
+                        priority++, numBackupInstances));
             }
         }
         return containerRequests;
@@ -388,24 +387,24 @@ public class CommonUtils {
         LOG.info("Unzipping " + src + " to destination " + dst);
         try {
             File dstFile = new File(dst);
-            if (!dstFile.exists()) {
+            if(!dstFile.exists()) {
                 dstFile.mkdirs();
             }
-            
+
             ZipFile zipFile = new ZipFile(src);
             zipFile.extractAll(dst);
         } catch (ZipException e) {
             LOG.fatal("Failed to unzip " + src, e);
         }
     }
-    
+
     final static int DEFAULT_TENSORFLOW_PORT = 2182;
     public static final int TRY_PORT_COUNT = 20;
 
     public static int getValidTensorflowPort() {
-        int zkValidPort =  DEFAULT_TENSORFLOW_PORT;
+        int zkValidPort = DEFAULT_TENSORFLOW_PORT;
         boolean success = false;
-        for(int i = 0; i <  TRY_PORT_COUNT; i++) {
+        for(int i = 0; i < TRY_PORT_COUNT; i++) {
             try {
                 if(!ZooKeeperUtils.isServerAlive(InetAddress.getLocalHost(), zkValidPort)) {
                     success = true;
@@ -416,19 +415,20 @@ public class CommonUtils {
             }
             zkValidPort += 1;
         }
-        if (success) {
+        if(success) {
             return zkValidPort;
         } else {
             throw new RuntimeException("Cannot find a empty port for tensorflow");
         }
     }
-    
+
     public static class ClientConsoleBoard {
         private Path boardFile;
+
         public ClientConsoleBoard(Configuration conf) {
             boardFile = new Path(conf.get(GlobalConfigurationKeys.TMP_LOG_PATH));;
             try {
-                if (HDFSUtils.getFS().createNewFile(boardFile)) {
+                if(HDFSUtils.getFS().createNewFile(boardFile)) {
                     LOG.info("Create boardFile Path:" + boardFile.toString());
                 } else {
                     LOG.info("boardFile exists:" + boardFile.toString());
@@ -437,7 +437,7 @@ public class CommonUtils {
                 LOG.error("Error create boardFile: " + boardFile, e);
             }
         }
-        
+
         public void showOnBoard(String message) {
             FSDataOutputStream hdfsLogStream = null;
             try {
@@ -446,7 +446,7 @@ public class CommonUtils {
             } catch (IOException e) {
                 LOG.error("Error writing message: " + message, e);
             } finally {
-                if (hdfsLogStream != null) {
+                if(hdfsLogStream != null) {
                     try {
                         hdfsLogStream.close();
                     } catch (IOException e) {

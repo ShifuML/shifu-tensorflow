@@ -214,8 +214,8 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
                 // here we do some logic to ingore those small number of slow container and starting training with whatever we 
                 // have now.
                 LOG.info("Session is REGESTERING_CLUSTER, we do check.");
-                int readyPsCnt = session.getTensorflowClusterSpec()._getReadyPsCnt();
-                int readyWorkerCnt = session.getTensorflowClusterSpec()._getReadyWorkerCnt();
+                int readyPsCnt = session.getTensorflowClusterSpec().getReadyPsCnt();
+                int readyWorkerCnt = session.getTensorflowClusterSpec().getReadyWorkerCnt();
                 int totalPsCnt = session.getNumTotalPsTasks();
                 int totalWorkerCnt = session.getNumTotalBackupWorkerTask() + session.getNumTotalWorkerTasks();
                 boolean isChiefWorkerReady = session.getTensorflowClusterSpec()._isChiefWorkerReady();
@@ -409,7 +409,6 @@ public class TensorflowApplicationMaster extends AbstractApplicationMaster {
     @Override
     protected void recovery() {
         // we do not need to recover ps because backup ps and ps are same
-        
         ConcurrentLinkedQueue<Integer> workerFailedQueue = session.getFailedWorkers();
         ConcurrentLinkedQueue<TensorflowTask> backupWorkerQueue = session.getJobNameToBackupTask()
                 .get(Constants.WORKER_JOB_NAME);

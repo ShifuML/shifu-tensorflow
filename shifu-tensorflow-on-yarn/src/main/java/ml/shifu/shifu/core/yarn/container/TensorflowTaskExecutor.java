@@ -47,6 +47,7 @@ import ml.shifu.shifu.core.yarn.util.CommonUtils;
 import ml.shifu.shifu.core.yarn.util.Constants;
 import ml.shifu.shifu.core.yarn.util.GlobalConfigurationKeys;
 import ml.shifu.shifu.core.yarn.util.HdfsUtils;
+import ml.shifu.shifu.util.Base64Utils;
 import ml.shifu.shifu.util.HDFSUtils;
 
 /**
@@ -220,6 +221,15 @@ public class TensorflowTaskExecutor implements Watcher {
             shellEnv.put("SELECTED_CATEGORY_COLUMN_NUMS",
                     globalConf.get(GlobalConfigurationKeys.SELECTED_CATEGORY_COLUMN_NUMS,
                             GlobalConfigurationKeys.DEFAULT_SELECTED_COLUMN_NUMS)); // default is -1
+        }
+
+        String delimiter = globalConf.get(ml.shifu.shifu.util.Constants.SHIFU_OUTPUT_DATA_DELIMITER,
+                ml.shifu.shifu.util.Constants.DEFAULT_DELIMITER);
+        if(StringUtils.isBlank(delimiter)) {
+            shellEnv.put("DELIMITER", ml.shifu.shifu.util.Constants.DEFAULT_DELIMITER);
+        } else {
+            delimiter = Base64Utils.base64Decode(delimiter);
+            shellEnv.put("DELIMITER", delimiter);
         }
 
         shellEnv.put("TMP_MODEL_PATH", globalConf.get(GlobalConfigurationKeys.TMP_MODEL_PATH));
