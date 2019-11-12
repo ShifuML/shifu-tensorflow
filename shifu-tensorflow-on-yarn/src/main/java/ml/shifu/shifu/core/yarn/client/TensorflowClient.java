@@ -245,9 +245,6 @@ public class TensorflowClient implements AutoCloseable {
         maxHbMisses = globalConf.getInt(GlobalConfigurationKeys.TASK_MAX_MISSED_HEARTBEATS,
                 GlobalConfigurationKeys.DEFAULT_TASK_MAX_MISSED_HEARTBEATS);
 
-        LOG.info("heartbeat interval [" + hbInterval + "]");
-        LOG.info("max heartbeat misses allowed [" + maxHbMisses + "]");
-
         if(amMemory < 0) {
             throw new IllegalArgumentException(
                     "Invalid memory specified for application master, exiting." + " Specified memory=" + amMemory);

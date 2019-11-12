@@ -543,7 +543,9 @@ public class TensorflowSession implements Watcher {
             }
         });
 
-        LOG.info("Worker messages: " + workerStats.toString());
+        if(LOG.isDebugEnabled()) {
+            LOG.debug("Worker messages: {}. " + workerStats.toString());
+        }
 
         clientConsoleBoard.showOnBoard(message);
     }

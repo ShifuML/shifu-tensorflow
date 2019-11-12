@@ -15,13 +15,16 @@
  */
 package ml.shifu.shifu.tensorflow;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 import org.encog.ml.data.MLData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tensorflow.Operation;
 import org.tensorflow.SavedModelBundle;
 import org.tensorflow.Session;
 import org.tensorflow.Tensor;
@@ -49,6 +52,12 @@ public class TensorflowModel implements Computable {
 
     private String outputNames;
 
+    /**
+     * If enable keras learning phase in training, such bool type of operations would be set as placeholder parameters
+     * and in eval should be set to true;
+     */
+    private List<String> kerasLearningPhaseTensors;
+
     @Override
     public double compute(MLData input) {
         double result = Double.MIN_VALUE;
@@ -58,6 +67,7 @@ public class TensorflowModel implements Computable {
 
         Tensor<?>[] propertyTensors = null;
         List<Tensor<?>> results = null;
+        List<Tensor<?>> tlpTensors = null;
 
         try {
             Session.Runner runner = smb.session().runner();
@@ -70,6 +80,15 @@ public class TensorflowModel implements Computable {
             Tensor<?> inputTensor = Tensor.create(new float[][] { inputFArr });
             runner.feed(inputNames[0], inputTensor);
 
+            if(kerasLearningPhaseTensors != null && kerasLearningPhaseTensors.size() > 0) {
+                tlpTensors = new ArrayList<>();
+                for(String klpTensor: kerasLearningPhaseTensors) {
+                    Tensor<?> tensor = Tensor.create(Boolean.FALSE, Boolean.class);
+                    tlpTensors.add(tensor);
+                    runner.feed(klpTensor, tensor);
+                }
+            }
+
             propertyTensors = new Tensor[inputNames.length];
             propertyTensors[0] = inputTensor;
             for(int i = 1; i < inputNames.length; i++) {
@@ -79,31 +98,44 @@ public class TensorflowModel implements Computable {
                 } catch (Exception e) {
                     LOG.error("Invalid input, {}", e);
                 }
-
             }
 
             runner.fetch(outputNames);
             results = runner.run();
             Tensor<?> output = results.get(0);
             result = ((float[][]) output.copyTo(new float[1][1]))[0][0];
+        } catch (Exception e) {
+            LOG.error("Error in model inference:", e);
         } finally {
-            closeTensors(propertyTensors, results);
+            closeTensors(propertyTensors, results, tlpTensors);
         }
 
         return result;
     }
 
     @SuppressWarnings("rawtypes")
-    private void closeTensors(Tensor[] propertyTensors, List<Tensor<?>> results) {
-        for(Tensor<?> tensor: propertyTensors) {
-            if(tensor != null) {
-                tensor.close();
+    private void closeTensors(Tensor[] propertyTensors, List<Tensor<?>> results, List<Tensor<?>> tlpTensors) {
+        if(propertyTensors != null) {
+            for(Tensor<?> tensor: propertyTensors) {
+                if(tensor != null) {
+                    tensor.close();
+                }
             }
         }
 
-        for(Tensor<?> tensor: results) {
-            if(tensor != null) {
-                tensor.close();
+        if(results != null) {
+            for(Tensor<?> tensor: results) {
+                if(tensor != null) {
+                    tensor.close();
+                }
+            }
+        }
+
+        if(tlpTensors != null) {
+            for(Tensor<?> tensor: tlpTensors) {
+                if(tensor != null) {
+                    tensor.close();
+                }
             }
         }
     }
@@ -167,6 +199,18 @@ public class TensorflowModel implements Computable {
 
         LOG.info("Load model from {}.", this.modelPath);
         this.smb = SavedModelBundle.load(modelPath, this.tags);
+
+        Iterator<Operation> operations = this.smb.graph().operations();
+
+        kerasLearningPhaseTensors = new ArrayList<String>();
+        while(operations.hasNext()) {
+            Operation operation = operations.next();
+            if("placeholder".equals(operation.type().toLowerCase()) && operation.name().contains("keras_learning_phase")) {
+                kerasLearningPhaseTensors.add(operation.name());
+            }
+        }
+        LOG.info("DEBUG: Keras learning phase tensors: {}.", kerasLearningPhaseTensors);
+
         LOG.info("Init tensorflow model done.");
         initiate = true;
     }
