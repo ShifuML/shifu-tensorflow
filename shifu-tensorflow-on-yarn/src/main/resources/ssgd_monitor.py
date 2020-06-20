@@ -4,12 +4,11 @@
 # from __future__ import print_function
 import os
 import tensorflow as tf
-import argparse
 import time
 import sys
 import logging
 import gzip
-from StringIO import StringIO
+from io import BytesIO
 import random
 import numpy as np
 from tensorflow.python.platform import gfile
@@ -20,8 +19,10 @@ from tensorflow.python.saved_model import signature_def_utils
 from tensorflow.python.saved_model import tag_constants
 import json
 import socket
-#from threading import Thread
-#import tensorboard.main as tb_main
+from threading import Thread
+import tensorboard.main as tb_main
+
+tf.compat.v1.disable_eager_execution()
 
 HIDDEN_NODES_COUNT = 20
 VALID_TRAINING_DATA_RATIO = 0.1
@@ -31,6 +32,7 @@ REPLICAS_TO_AGGREGATE_RATIO = 1
 
 DELIMITER = '|'
 BATCH_SIZE = 100
+TB_PORT_ENV_VAR = 'TB_PORT'
 
 # read from env
 cluster_spec = json.loads(os.environ["CLUSTER_SPEC"])
@@ -55,37 +57,35 @@ socket_client.connect(("127.0.0.1", socket_server_port))
 
 
 def nn_layer(input_tensor, input_dim, output_dim, act=tf.nn.tanh, act_op_name=None):
-    l2_reg = tf.contrib.layers.l2_regularizer(scale=0.1)
-    weights = tf.get_variable(name="weight_"+str(act_op_name),
+    l2_reg = tf.keras.regularizers.l2(l=0.1)
+    weights = tf.compat.v1.get_variable(name="weight_"+str(act_op_name),
                               shape=[input_dim, output_dim],
                               regularizer=l2_reg,
-                              #initializer=tf.glorot_uniform_initializer())
-                              initializer=tf.contrib.layers.xavier_initializer())
-    biases = tf.get_variable(name="biases_"+str(act_op_name),
+                              initializer=tf.initializers.GlorotUniform())
+    biases = tf.compat.v1.get_variable(name="biases_"+str(act_op_name),
                              shape=[output_dim],
                              regularizer=l2_reg,
-                             #initializer=tf.glorot_uniform_initializer())
-                             initializer=tf.contrib.layers.xavier_initializer())
+                             initializer=tf.initializers.GlorotUniform())
 
-    activations = act(tf.matmul(input_tensor, weights) + biases, name=act_op_name)
+    activations = act(tf.compat.v1.matmul(input_tensor, weights) + biases, name=act_op_name)
     return activations
 
 
 def get_activation_fun(name):
     if name is None:
-        return tf.nn.leaky_relu
+        return tf.compat.v1.nn.leaky_relu
     name = name.lower()
 
     if 'sigmoid' == name:
-        return tf.nn.sigmoid
+        return tf.compat.v1.nn.sigmoid
     elif 'tanh' == name:
-        return tf.nn.tanh
+        return tf.compat.v1.nn.tanh
     elif 'relu' == name:
-        return tf.nn.relu
+        return tf.compat.v1.nn.relu
     elif 'leakyrelu' == name:
-        return tf.nn.leaky_relu
+        return tf.compat.v1.nn.leaky_relu
     else:
-        return tf.nn.leaky_relu
+        return tf.compat.v1.nn.leaky_relu
 
 
 def generate_from_modelconf(x, model_conf):
@@ -118,24 +118,24 @@ def model(x, y_, sample_weight, model_conf):
         output_nodes = HIDDEN_NODES_COUNT
 
     logging.info("output_nodes : " + str(output_nodes))
-    y = nn_layer(output_digits, output_nodes, 1, act=tf.nn.sigmoid, act_op_name="shifu_output_0")
+    y = nn_layer(output_digits, output_nodes, 1, act=tf.compat.v1.nn.sigmoid, act_op_name="shifu_output_0")
 
     # count the number of updates
-    global_step = tf.get_variable('global_step', [],
-                                  initializer=tf.constant_initializer(0),
+    global_step = tf.compat.v1.get_variable('global_step', [],
+                                  initializer=tf.compat.v1.constant_initializer(0),
                                   trainable=False,
-                                  dtype=tf.int32)
+                                  dtype=tf.compat.v1.int32)
 
-    loss = tf.losses.mean_squared_error(predictions=y, labels=y_, weights=sample_weight)
+    loss = tf.compat.v1.losses.mean_squared_error(predictions=y, labels=y_, weights=sample_weight)
 
     # we suppose every worker has same batch_size
     if model_conf is not None:
         learning_rate = model_conf['train']['params']['LearningRate']
     else:
         learning_rate = 0.003
-    opt = tf.train.SyncReplicasOptimizer(
+    opt = tf.compat.v1.train.SyncReplicasOptimizer(
         #tf.train.GradientDescentOptimizer(learning_rate),
-        tf.train.AdadeltaOptimizer(learning_rate=learning_rate),
+        tf.compat.v1.train.AdadeltaOptimizer(learning_rate=learning_rate),
         replicas_to_aggregate=int(total_training_data_number * (1-VALID_TRAINING_DATA_RATIO) / BATCH_SIZE * REPLICAS_TO_AGGREGATE_RATIO),
         total_num_replicas=int(total_training_data_number * (1-VALID_TRAINING_DATA_RATIO) / BATCH_SIZE),
         name="shifu_sync_replicas")
@@ -151,17 +151,17 @@ def main(_):
 
     ps_hosts = cluster_spec['ps']
     worker_hosts = cluster_spec['worker']
-    cluster = tf.train.ClusterSpec({"ps": ps_hosts, "worker": worker_hosts})
+    cluster = tf.compat.v1.train.ClusterSpec({"ps": ps_hosts, "worker": worker_hosts})
 
     # allows this node know about all other nodes
     if job_name == 'ps':  # checks if parameter server
-        server = tf.train.Server(cluster,
+        server = tf.compat.v1.train.Server(cluster,
                                  job_name="ps",
                                  task_index=task_index)
         server.join()
     else:  # it must be a worker server
         is_chief = (task_index == 0)  # checks if this is the chief node
-        server = tf.train.Server(cluster,
+        server = tf.compat.v1.train.Server(cluster,
                                  job_name="worker",
                                  task_index=task_index)
 
@@ -200,14 +200,15 @@ def main(_):
 
         # Graph
         worker_device = "/job:%s/task:%d" % (job_name, task_index)
-        with tf.device(tf.train.replica_device_setter(#ps_tasks=n_pss,
+
+        with tf.compat.v1.device(tf.compat.v1.train.replica_device_setter(
                                                       cluster=cluster,
                                                       worker_device=worker_device
                                                       )):
-            input_placeholder = tf.placeholder(dtype=tf.float32, shape=(None, FEATURE_COUNT),
+            input_placeholder = tf.compat.v1.placeholder(dtype=tf.compat.v1.float32, shape=(None, FEATURE_COUNT),
                                                name="shifu_input_0")
-            label_placeholder = tf.placeholder(dtype=tf.int32, shape=(None, 1))
-            sample_weight_placeholder = tf.placeholder(dtype=tf.float32, shape=(None, 1))
+            label_placeholder = tf.compat.v1.placeholder(dtype=tf.compat.v1.int32, shape=(None, 1))
+            sample_weight_placeholder = tf.compat.v1.placeholder(dtype=tf.float32, shape=(None, 1))
 
             opt, train_step, loss, global_step, y = model(input_placeholder,
                                                           label_placeholder,
@@ -226,29 +227,29 @@ def main(_):
             ready_for_local_init = opt.ready_for_local_init_op
 
             # Initializing the variables
-            init_op = tf.initialize_all_variables()
+            init_op = tf.compat.v1.initialize_all_variables()
             logging.info("---Variables initialized---")
 
         # **************************************************************************************
         # Session
         sync_replicas_hook = opt.make_session_run_hook(is_chief)
-        stop_hook = tf.train.StopAtStepHook(num_steps=EPOCH)
+        stop_hook = tf.compat.v1.train.StopAtStepHook(num_steps=EPOCH)
         chief_hooks = [sync_replicas_hook, stop_hook]
-        scaff = tf.train.Scaffold(init_op=init_op,
+        scaff = tf.compat.v1.train.Scaffold(init_op=init_op,
                                   local_init_op=local_init,
                                   ready_for_local_init_op=ready_for_local_init)
         # Configure
         if "IS_BACKUP" in os.environ:
-            config = tf.ConfigProto(log_device_placement=False,
+            config = tf.compat.v1.ConfigProto(log_device_placement=False,
                                     allow_soft_placement=True,
                                     device_filters=['/job:ps', '/job:worker/task:0',
                                                     '/job:worker/task:%d' % task_index])
         else:
-            config = tf.ConfigProto(log_device_placement=False,
+            config = tf.compat.v1.ConfigProto(log_device_placement=False,
                                     allow_soft_placement=True)
 
         # Create a "supervisor", which oversees the training process.
-        sess = tf.train.MonitoredTrainingSession(master=server.target,
+        sess = tf.compat.v1.train.MonitoredTrainingSession(master=server.target,
                                                  is_chief=is_chief,
                                                  config=config,
                                                  scaffold=scaff,
@@ -302,12 +303,12 @@ def main(_):
 
         # We just need to make sure chief worker exit with success status is enough
         if is_chief:
-            tf.reset_default_graph()
+            tf.compat.v1.reset_default_graph()
 
             # add placeholders for input images (and optional labels)
-            x = tf.placeholder(dtype=tf.float32, shape=(None, FEATURE_COUNT),
+            x = tf.compat.v1.placeholder(dtype=tf.compat.v1.float32, shape=(None, FEATURE_COUNT),
                                name="shifu_input_0")
-            with tf.get_default_graph().as_default():
+            with tf.compat.v1.get_default_graph().as_default():
                 if BUILD_MODEL_BY_CONF_ENABLE and model_conf is not None:
                     output_digits, output_nodes = generate_from_modelconf(x, model_conf)
                 else:
@@ -315,13 +316,13 @@ def main(_):
                     output_nodes = HIDDEN_NODES_COUNT
 
                 logging.info("output_nodes : " + str(output_nodes))
-                prediction = nn_layer(output_digits, output_nodes, 1, act=tf.nn.sigmoid,
+                prediction = nn_layer(output_digits, output_nodes, 1, act=tf.compat.v1.nn.sigmoid,
                                       act_op_name="shifu_output_0")
 
             # restore from last checkpoint
-            saver = tf.train.Saver()
-            with tf.Session() as sess:
-                ckpt = tf.train.get_checkpoint_state(tmp_model_path)
+            saver = tf.compat.v1.train.Saver()
+            with tf.compat.v1.Session() as sess:
+                ckpt = tf.compat.v1.train.get_checkpoint_state(tmp_model_path)
                 logging.info("ckpt: {}".format(ckpt))
                 assert ckpt, "Invalid model checkpoint path: {}".format(tmp_model_path)
                 saver.restore(sess, ckpt.model_checkpoint_path)
@@ -374,9 +375,9 @@ def load_data(data_file):
         file_count += 1
 
         with gfile.Open(currentFile, 'rb') as f:
-            gf = gzip.GzipFile(fileobj=StringIO(f.read()))
+            gf = gzip.GzipFile(fileobj=BytesIO(f.read()))
             while True:
-                line = gf.readline()
+                line = gf.readline().decode()
                 if len(line) == 0:
                     break
 
@@ -387,7 +388,7 @@ def load_data(data_file):
                 columns = line.split(DELIMITER)
 
                 if feature_column_nums is None:
-                    feature_column_nums = range(0, len(columns))
+                    feature_column_nums = list(range(0, len(columns)))
 
                     feature_column_nums.remove(target_column_num)
                     if sample_weight_column_num >= 0:
@@ -409,7 +410,7 @@ def load_data(data_file):
                             logging.info("feature_column_num: " + str(feature_column_num))
                     train_data.append(single_train_data)
 
-                    if sample_weight_column_num >= 0 and sample_weight_column_num < len(columns):
+                    if 0 <= sample_weight_column_num < len(columns):
                         weight = float(columns[sample_weight_column_num].strip('\n'))
                         if weight < 0.0:
                             logging.info("Warning: weight is below 0. example:" + line)
@@ -434,7 +435,7 @@ def load_data(data_file):
 
                     valid_data.append(single_valid_data)
 
-                    if  sample_weight_column_num >= 0 and sample_weight_column_num < len(columns):
+                    if 0 <= sample_weight_column_num < len(columns):
                         weight = float(columns[sample_weight_column_num].strip('\n'))
                         if weight < 0.0:
                             logging.info("Warning: weight is below 0. example:" + line)
@@ -455,8 +456,8 @@ def load_data(data_file):
 
 
 def simple_save(session, export_dir, inputs, outputs, legacy_init_op=None):
-    if tf.gfile.Exists(export_dir):
-        tf.gfile.DeleteRecursively(export_dir)
+    if tf.compat.v1.gfile.Exists(export_dir):
+        tf.compat.v1.gfile.DeleteRecursively(export_dir)
     signature_def_map = {
         signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY:
             signature_def_utils.predict_signature_def(inputs, outputs)
@@ -486,14 +487,14 @@ def export_generic_config(export_dir):
     config_json_str += "         \"normtype\": \"ZSCALE\"\n"
     config_json_str += "      }\n"
     config_json_str += "}"
-    f = tf.gfile.GFile(export_dir + "/GenericModelConfig.json", mode="w+")
+    f = tf.compat.v1.gfile.GFile(export_dir + "/GenericModelConfig.json", mode="w+")
     f.write(config_json_str)
 
 
 def start_tensorboard(checkpoint_dir):
-    tf.flags.FLAGS.logdir = checkpoint_dir
+    tf.compat.v1.flags.FLAGS.logdir = checkpoint_dir
     if TB_PORT_ENV_VAR in os.environ:
-        tf.flags.FLAGS.port = os.environ['TB_PORT']
+        tf.compat.v1.flags.FLAGS.port = os.environ['TB_PORT']
 
     tb_thread = Thread(target=tb_main.run_main)
     tb_thread.daemon = True
@@ -501,5 +502,6 @@ def start_tensorboard(checkpoint_dir):
     logging.info("Starting TensorBoard with --logdir=" + checkpoint_dir + " in daemon thread...")
     tb_thread.start()
 
+
 if __name__ == '__main__':
-    tf.app.run()
+    tf.compat.v1.app.run()
