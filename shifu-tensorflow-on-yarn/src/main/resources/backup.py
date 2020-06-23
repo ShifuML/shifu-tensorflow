@@ -2,24 +2,13 @@
 Author: Tommy Mulc
 """
 
+import json
+import logging
 # from __future__ import print_function
 import os
-import tensorflow as tf
-import argparse
 import time
-import sys
-import logging
-import gzip
-from StringIO import StringIO
-import random
-import numpy as np
-from tensorflow.python.platform import gfile
-from tensorflow.python.framework import ops
-from tensorflow.python.saved_model import builder
-from tensorflow.python.saved_model import signature_constants
-from tensorflow.python.saved_model import signature_def_utils
-from tensorflow.python.saved_model import tag_constants
-import json
+
+import tensorflow as tf
 
 REPLICAS_TO_AGGREGATE_RATIO = 1
 FEATURE_COUNT = 30
@@ -27,7 +16,7 @@ HIDDEN_NODES_COUNT = 20
 VALID_TRAINING_DATA_RATIO = 0.3
 DELIMITER = '|'
 BATCH_SIZE = 10
-EPOCH = 10 # TODO: should consider recovery from checkpoint, we need to reduce current global step
+EPOCH = 10  # TODO: should consider recovery from checkpoint, we need to reduce current global step
 WORKING_DIR = "hdfs://horton/user/webai/.yarn/"
 
 # read from env
@@ -49,16 +38,16 @@ def main(_):
 
     # allows this node know about all other nodes
     if job_name == 'ps':  # checks if parameter server
-        server = tf.train.Server(cluster,
-                                 job_name="ps",
-                                 task_index=task_index)
+        server = tf.compat.v1.train.Server(cluster,
+                                           job_name="ps",
+                                           task_index=task_index)
         server.join()
     else:  # it must be a worker server
         logging.info("Loading data from worker index = %d" % task_index)
 
-        server = tf.train.Server(cluster,
-                                 job_name="worker",
-                                 task_index=task_index)
+        server = tf.compat.v1.train.Server(cluster,
+                                           job_name="worker",
+                                           task_index=task_index)
 
         logging.info("backup worker join!!")
 
@@ -66,6 +55,5 @@ def main(_):
             time.sleep(1000000)
 
 
-
 if __name__ == '__main__':
-    tf.app.run()
+    tf.compat.v1.app.run()
