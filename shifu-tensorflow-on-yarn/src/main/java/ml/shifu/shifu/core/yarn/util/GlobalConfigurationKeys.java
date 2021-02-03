@@ -82,6 +82,7 @@ public class GlobalConfigurationKeys {
     public static final String WEIGHT_COLUMN_NUM = SHIFU_APPLICATION_PREFIX + "weight-column-number";
     public static final String TARGET_COLUMN_NUM = SHIFU_APPLICATION_PREFIX + "target-column-number";
     public static final String SELECTED_COLUMN_NUMS = SHIFU_APPLICATION_PREFIX + "selected-column-numbers";
+    public static final String META_COLUMN_NUM = SHIFU_APPLICATION_PREFIX + "meta-column-numbers";
     public static final String SELECTED_NUMERIC_COLUMN_NUMS = SHIFU_APPLICATION_PREFIX + "selected-numeric-column-numbers";
     public static final String SELECTED_CATEGORY_COLUMN_NUMS = SHIFU_APPLICATION_PREFIX + "selected-category-column-numbers";
     
