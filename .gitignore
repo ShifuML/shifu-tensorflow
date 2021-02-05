@@ -5,3 +5,5 @@
 ../glibc.zip
 ../python_env.zip
 shifu-0.12.0-hdp-yarn.tar.gz
+.idea/
+*.iml
