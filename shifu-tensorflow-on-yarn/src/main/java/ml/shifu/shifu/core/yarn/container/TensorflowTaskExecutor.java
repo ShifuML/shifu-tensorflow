@@ -222,6 +222,9 @@ public class TensorflowTaskExecutor implements Watcher {
                     globalConf.get(GlobalConfigurationKeys.SELECTED_CATEGORY_COLUMN_NUMS,
                             GlobalConfigurationKeys.DEFAULT_SELECTED_COLUMN_NUMS)); // default is -1
         }
+        if(StringUtils.isNotBlank(globalConf.get(GlobalConfigurationKeys.META_COLUMN_NUM))) {
+            shellEnv.put("META_COLUMN_NUM", globalConf.get(GlobalConfigurationKeys.META_COLUMN_NUM));
+        }
 
         String delimiter = globalConf.get(ml.shifu.shifu.util.Constants.SHIFU_OUTPUT_DATA_DELIMITER,
                 ml.shifu.shifu.util.Constants.DEFAULT_DELIMITER);
