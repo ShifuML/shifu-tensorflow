@@ -108,6 +108,11 @@
 									<classifier>hdp-yarn</classifier>
 									<outputDirectory>${project.build.directory}</outputDirectory>
 								</artifactItem>
+								<dependency>
+									<groupId>net.lingala.zip4j</groupId>
+									<artifactId>zip4j</artifactId>
+									<version>1.3.2</version>
+								</dependency>
 								<artifactItem>
 									<groupId>org.tensorflow</groupId>
 									<artifactId>tensorflow</artifactId>
