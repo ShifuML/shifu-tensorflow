@@ -35,7 +35,7 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss</maven.build.timestamp.format>
-		<hadoop.version>2.7.0</hadoop.version>
+		<hadoop.version>3.2.3</hadoop.version>
 		<shifu.version>0.13.0-SNAPSHOT</shifu.version>
 	</properties>
 
